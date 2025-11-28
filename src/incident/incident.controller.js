@@ -3,6 +3,7 @@ import catchAsyncError from "../../utils/catchAsyncError.js";
 import ErrorHandler from "../../utils/errorHandler.js";
 import Incident from "./incident.model.js";
 import Static from "../shift/static.model.js";
+import User from "../user/user.model.js";
 
 export const createIncident = catchAsyncError(async (req, res, next) => {
   const { name, location, description, images, shiftId } = req.body;
@@ -116,5 +117,91 @@ export const getIncidentById = catchAsyncError(async (req, res, next) => {
     data: incident,
   });
 });
+
+export const getAllIncidentsForAdmin = catchAsyncError(async (req, res, next) => {
+  let { page = 1, limit = 10 } = req.query;
+
+  page = parseInt(page);
+  limit = parseInt(limit);
+  const offset = (page - 1) * limit;
+
+  const { count, rows: incidents } = await Incident.findAndCountAll({
+    order: [["createdAt", "DESC"]],
+    
+    limit,
+    offset,
+    include: [
+      {
+        model: User,
+        as: "assignedGuardUser",
+        attributes: ["id", "name"]
+      },
+      {
+        model: User,
+        as: "reporter",
+        attributes: ["id", "name"]
+      },
+      {
+        model: Static,
+        as: "shift",
+        attributes: ["id", "type"]
+      }
+    ]
+    
+    
+  });
+
+  res.status(StatusCodes.OK).json({
+    success: true,
+    message: "All incidents fetched successfully",
+    data: incidents,
+    pagination: {
+      total: count,
+      page,
+      totalPages: Math.ceil(count / limit),
+      limit,
+    },
+  });
+});
+
+export const getIncidentByIdForAdmin = catchAsyncError(async (req, res, next) => {
+  console.log("1");
+  const { id } = req.params;
+  console.log(id,"id");
+  const incident = await Incident.findByPk(id,{
+    include: [
+      {
+        model: User,
+        as: "assignedGuardUser",
+        attributes: ["id", "name"]
+      },
+      {
+        model: User,
+        as: "reporter",
+        attributes: ["id", "name"]
+      },
+      {
+        model: Static,
+        as: "shift",
+        attributes: ["id", "type"]
+      }
+    ]
+  });
+  console.log(incident,"fetched");
+
+  if (!incident) {
+    return next(
+      new ErrorHandler("Incident not found", StatusCodes.NOT_FOUND)
+    );
+  }
+
+  res.status(StatusCodes.OK).json({
+    success: true,
+    message: "Incident details fetched successfully",
+    data: incident,
+  });
+});
+
+
 
 

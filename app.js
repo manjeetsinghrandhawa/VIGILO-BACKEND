@@ -8,6 +8,7 @@ import uploadRoute from "./src/upload/upload.router.js";
 import orderRoute from "./src/order/order.router.js";     
 import shiftRoute from "./src/shift/shift.router.js";    
 import incidentRoute from "./src/incident/incident.router.js"; 
+import schedulingRoute from "./src/scheduling/scheduling.router.js";
 
 
 dotenv.config({ path: "./config/.env" });
@@ -28,6 +29,7 @@ app.use("/api/v1/upload", uploadRoute);
 app.use("/api/v1/orders", orderRoute);
 app.use("/api/v1/shifts", shiftRoute);
 app.use("/api/v1/incidents", incidentRoute);
+app.use("/api/v1/scheduling", schedulingRoute);
 
 app.get("/", (req, res) => res.json({ anc: "abc" }));
 

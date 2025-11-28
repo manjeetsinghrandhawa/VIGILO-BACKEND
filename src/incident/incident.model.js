@@ -43,4 +43,11 @@ Incident.belongsTo(User, {
   onDelete: "SET NULL",
 });
 
+Incident.belongsTo(User, {
+  foreignKey: "assignedGuard",
+  as: "assignedGuardUser",
+  onDelete: "SET NULL",
+});
+
+
 export default Incident;

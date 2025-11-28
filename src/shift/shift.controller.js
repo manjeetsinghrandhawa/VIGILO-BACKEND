@@ -84,7 +84,7 @@ const end = date
   });
 });
 
-export const getAllShiftsForUser = catchAsyncError(async (req, res, next) => {
+export const getAllShifts = catchAsyncError(async (req, res, next) => {
   const userId = req.user?.id;
 
   if (!userId) {
@@ -162,6 +162,7 @@ export const getAllShiftsForUser = catchAsyncError(async (req, res, next) => {
       startTime: shift.startTime,
       endTime: shift.endTime,
       status: dynamicStatus,
+      guardName: shift.guards[0]?.name || "Unknown",
       guardStatus: shift.guards[0]?.StaticGuards?.status || "pending",
     });
   }
