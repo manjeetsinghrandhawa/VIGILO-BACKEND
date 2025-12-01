@@ -541,3 +541,26 @@ export const getGuardById = catchAsyncError(async (req, res, next) => {
     },
   });
 });
+
+//fetch all clients details 
+export const getAllClients = catchAsyncError(async (req, res, next) => {
+
+  //  Find the Clients
+  const user = await userModel.findOne({
+    where: {  role: "user" },
+    attributes: ["id", "name", "email", "mobile", "address"],
+  });
+
+  if (!user) {
+    return next(new ErrorHandler("Client not found", StatusCodes.NOT_FOUND));
+  }
+
+  //  Response
+  res.status(StatusCodes.OK).json({
+    success: true,
+    message: "Client Details fetched successfully",
+    data: {
+      ...user.toJSON(),
+    },
+  });
+});

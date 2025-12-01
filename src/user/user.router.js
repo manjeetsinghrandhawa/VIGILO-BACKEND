@@ -1,5 +1,5 @@
 import express from "express";
-import { registerUser, verifyRegisterEmail, resendOtp, userLogin, registerAdmin, forgotPassword, verifyForgotPasswordOtp, resendForgotPasswordOtp, setNewPassword, registerGaurd, getProfile, editProfile, deleteProfile, getAllGuards, getGuardById } from "./user.controller.js";
+import { registerUser, verifyRegisterEmail, resendOtp, userLogin, registerAdmin, forgotPassword, verifyForgotPasswordOtp, resendForgotPasswordOtp, setNewPassword, registerGaurd, getProfile, editProfile, deleteProfile, getAllGuards, getGuardById,getAllClients } from "./user.controller.js";
 import { auth, isAdmin } from "../../middlewares/auth.js";
 
 const route = express.Router();
@@ -22,6 +22,7 @@ route.delete("/delete-profile",auth, deleteProfile );
 
 route.get("/getAllGuards",auth,isAdmin, getAllGuards );
 route.get("/getGuardById/:id",auth,isAdmin, getGuardById );
+route.get("/getAllClients",auth,isAdmin, getAllClients );
 
 
 
