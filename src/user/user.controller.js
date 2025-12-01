@@ -546,7 +546,7 @@ export const getGuardById = catchAsyncError(async (req, res, next) => {
 export const getAllClients = catchAsyncError(async (req, res, next) => {
 
   //  Find the Clients
-  const user = await userModel.findOne({
+  const user = await userModel.findAll({
     where: {  role: "user" },
     attributes: ["id", "name", "email", "mobile", "address"],
   });
@@ -559,8 +559,32 @@ export const getAllClients = catchAsyncError(async (req, res, next) => {
   res.status(StatusCodes.OK).json({
     success: true,
     message: "Client Details fetched successfully",
-    data: {
-      ...user.toJSON(),
-    },
+    data: user
+  });
+});
+
+//to delete a client
+export const deleteClient = catchAsyncError(async (req, res, next) => {
+  const { id } = req.body;
+
+  if (!id) {
+    return next(new ErrorHandler("Client ID is required", StatusCodes.BAD_REQUEST));
+  }
+
+  // Check if the client exists
+  const user = await userModel.findOne({
+    where: { id, role: "user" },
+  });
+
+  if (!user) {
+    return next(new ErrorHandler("Client not found", StatusCodes.NOT_FOUND));
+  }
+
+  // Delete the client
+  await user.destroy();
+
+  res.status(StatusCodes.OK).json({
+    success: true,
+    message: "Client deleted successfully",
   });
 });
