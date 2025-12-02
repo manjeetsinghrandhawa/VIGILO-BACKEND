@@ -142,6 +142,53 @@ export const registerGaurd = catchAsyncError(async (req, res, next) => {
   });
 });
 
+export const createGuardByAdmin = catchAsyncError(async (req, res, next) => {
+  const { name, email, password, address, mobile, avatar } = req.body;
+
+  // Validate required fields
+  if (!name || !email || !password || !address) {
+    return next(
+      new ErrorHandler(
+        "Name, email, password, and address are required fields.",
+        StatusCodes.BAD_REQUEST
+      )
+    );
+  }
+
+  // Check if email already exists
+  const existingUser = await userModel.findOne({ where: { email } });
+  if (existingUser) {
+    return next(
+      new ErrorHandler(
+        "A user with this email already exists!",
+        StatusCodes.CONFLICT
+      )
+    );
+  }
+
+  // Hash password
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  // Create guard directly (no OTP, no verification)
+  const newGuard = await userModel.create({
+    name,
+    email,
+    password: hashedPassword,
+    address,
+    mobile,
+    avatar,
+    role: "guard",
+    isVerified: true, // Force verified since admin is adding
+  });
+
+  return res.status(StatusCodes.CREATED).json({
+    success: true,
+    message: "Guard created successfully.",
+    guard: newGuard,
+  });
+});
+
+
 // Verify Email OTP
 export const verifyRegisterEmail = catchAsyncError(async (req, res, next) => {
   const { email, otp } = req.body;
@@ -479,7 +526,7 @@ export const getAllGuards = catchAsyncError(async (req, res, next) => {
         ],
       }),
     },
-    attributes: ["id", "name", "email", "mobile", "createdAt"],
+    attributes: ["id", "name", "email", "mobile", "createdAt","address"],
     limit,
     offset,
     order: [["createdAt", "DESC"]],
