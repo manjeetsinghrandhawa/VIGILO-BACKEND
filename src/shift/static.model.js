@@ -58,5 +58,10 @@ const Static = sequelize.define(
 // Association: one Order → many Statics
 Order.hasMany(Static, { foreignKey: "orderId", onDelete: "CASCADE" });
 Static.belongsTo(Order, { foreignKey: "orderId" });
+Static.belongsTo(Order, {
+  foreignKey: "orderId",
+  as: "order"
+});
+
 
 export default Static;

@@ -12,6 +12,7 @@ const Order = sequelize.define(
     },
     serviceType: {
       type: DataTypes.ENUM(
+        "static",
         "premiumSecurity",
         "standardPatrol",
         "24/7Monitoring",

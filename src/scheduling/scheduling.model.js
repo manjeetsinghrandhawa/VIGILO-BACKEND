@@ -59,6 +59,7 @@ Scheduling.belongsTo(User, {
     as: "reporter",
     onDelete: "SET NULL",
   });
+  
 
 
 export default Scheduling;

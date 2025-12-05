@@ -2,6 +2,8 @@ import express from "express";
 import {
   createSchedule,
   getAllSchedules,
+  clockIn,
+  clockOut
   
 } from "./scheduling.controller.js";
 import { auth, isGaurd, isAdmin } from "../../middlewares/auth.js";
@@ -16,6 +18,12 @@ router.post("/createSchedule",auth,isAdmin, createSchedule);
 router.get("/getAllSchedules",auth,isAdmin, getAllSchedules);
 
 //to delete a schedule by ID
+
+//clock in a shift by guard
+router.post("/clockIn",auth,isGaurd,clockIn );
+
+//clock out a shift by guard
+router.post("/clockOut",auth,isGaurd,clockOut );
 
 
 

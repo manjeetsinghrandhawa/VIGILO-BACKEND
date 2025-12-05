@@ -240,6 +240,7 @@ export const getAllOrders = catchAsyncError(async (req, res, next) => {
   ];
 
   const allowedServiceTypes = [
+    "static",
     "premiumSecurity",
     "standardPatrol",
     "24/7Monitoring",

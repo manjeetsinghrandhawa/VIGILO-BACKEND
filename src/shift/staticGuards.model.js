@@ -30,10 +30,23 @@ const StaticGuards = sequelize.define(
       onDelete: "CASCADE",
     },
     status: {
-      type: DataTypes.ENUM("pending", "accepted", "rejected"),
+      type: DataTypes.ENUM("pending", "accepted", "rejected","ongoing", "completed", "overtime"),
       allowNull: false,
       defaultValue: "pending",
     },
+    clockInTime: {
+  type: DataTypes.DATE,
+  allowNull: true
+},
+clockOutTime: {
+  type: DataTypes.DATE,
+  allowNull: true
+},
+totalHours: {
+  type: DataTypes.FLOAT,
+  allowNull: true
+}
+
   },
   {
     timestamps: true,
@@ -59,5 +72,18 @@ User.belongsToMany(Static, {
   foreignKey: "guardId",
   as: "statics",
 });
+
+// StaticGuards → Static (one assignment belongs to one shift)
+StaticGuards.belongsTo(Static, {
+  foreignKey: "staticId",
+  as: "static",
+});
+
+// StaticGuards → User (one assignment belongs to one guard)
+StaticGuards.belongsTo(User, {
+  foreignKey: "guardId",
+  as: "guard",
+});
+
 
 export default StaticGuards;
