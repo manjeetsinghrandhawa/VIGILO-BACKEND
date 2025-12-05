@@ -242,7 +242,7 @@ export const getAllSchedules = async (req, res, next) => {
 // Delete a schedule by ID
 export const deleteSchedule = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = req.body;
 
     if (!id) {
       return res.status(400).json({

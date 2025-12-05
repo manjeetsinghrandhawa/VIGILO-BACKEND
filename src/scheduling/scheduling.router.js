@@ -2,6 +2,7 @@ import express from "express";
 import {
   createSchedule,
   getAllSchedules,
+  deleteSchedule,
   clockIn,
   clockOut
   
@@ -18,6 +19,7 @@ router.post("/createSchedule",auth,isAdmin, createSchedule);
 router.get("/getAllSchedules",auth,isAdmin, getAllSchedules);
 
 //to delete a schedule by ID
+router.post("/deleteSchedule",auth,isAdmin, deleteSchedule );
 
 //clock in a shift by guard
 router.post("/clockIn",auth,isGaurd,clockIn );
