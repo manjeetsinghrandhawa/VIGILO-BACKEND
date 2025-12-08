@@ -171,17 +171,19 @@ export const getAllSchedules = async (req, res, next) => {
 
     const updatedShifts = [];
 
-    for (const shift of shifts) {
-      const start = moment(shift.startTime).tz(tz);
-      const end = moment(shift.endTime).tz(tz);
+     for (const shift of shifts) {
+      // FOR STATUS CHECKING ONLY — we convert UTC → LOCAL here
+      const startLocal = moment(shift.startTime).tz(tz);
+      const endLocal = moment(shift.endTime).tz(tz);
 
+      // Determine dynamic shift status
       let dynamicStatus = shift.status;
 
-      if (now.isBefore(start)) dynamicStatus = "upcoming";
-      else if (now.isBetween(start, end)) dynamicStatus = "ongoing";
-      else if (now.isSameOrAfter(end)) dynamicStatus = "completed";
+      if (now.isBefore(startLocal)) dynamicStatus = "upcoming";
+      else if (now.isBetween(startLocal, endLocal)) dynamicStatus = "ongoing";
+      else if (now.isSameOrAfter(endLocal)) dynamicStatus = "completed";
 
-      // Only update DB if the status changed
+      // Update DB only if status changed
       if (shift.status !== dynamicStatus) {
         try {
           await shift.update({ status: dynamicStatus });
@@ -194,7 +196,8 @@ export const getAllSchedules = async (req, res, next) => {
         id: shift.id,
         orderId: shift.orderId,
         orderLocationAddress: shift.order?.locationAddress || null,   // NEW FIELD
-        date: moment(shift.startTime).tz(tz).format("YYYY-MM-DD"),
+        // date MUST be from UTC startTime WITHOUT timezone conversion
+        date: moment.utc(shift.startTime).format("YYYY-MM-DD"),
         type: shift.type,
         description: shift.description,
         startTime: shift.startTime,
@@ -301,6 +304,7 @@ const getShiftDuration = (start, end) => {
   return `${hours}h ${minutes}m`;
 };
 
+// CLOCK-IN
 export const clockIn = async (req, res, next) => {
   try {
     const { staticId, guardId } = req.body;
@@ -309,6 +313,24 @@ export const clockIn = async (req, res, next) => {
       return next(new ErrorHandler("staticId and guardId are required", 400));
     }
 
+    // 🚫 EDGE CASE 2: Check if guard is already in ANY active shift
+    const activeShift = await StaticGuards.findOne({
+      where: {
+        guardId,
+        status: { [Op.in]: ["ongoing"] }
+      }
+    });
+
+    if (activeShift) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "You must clock out from the previous shift before starting a new one.",
+        lastActiveShiftId: activeShift.staticId
+      });
+    }
+
+    // Fetch assignment for this shift
     const assignment = await StaticGuards.findOne({
       where: { staticId, guardId },
       include: [{ model: Static, as: "static" }],
@@ -329,7 +351,7 @@ export const clockIn = async (req, res, next) => {
 
     let warnings = [];
 
-    // EARLY CLOCK-IN → DO NOT CLOCK IN, JUST SEND WARNING
+    // EARLY CLOCK-IN
     if (now < shiftStart) {
       return res.status(400).json({
         success: false,
@@ -371,7 +393,6 @@ export const clockIn = async (req, res, next) => {
     assignment.status = "ongoing";
     await assignment.save();
 
-    // CALCULATE SHIFT DURATION
     const shiftDuration = getShiftDuration(shiftStart, shiftEnd);
 
     return res.status(200).json({
@@ -381,15 +402,12 @@ export const clockIn = async (req, res, next) => {
       data: {
         staticId,
         guardId,
-
         shiftDate: formatDate(shiftStart),
-        shiftDuration,  // 🔥 NEW FIELD
-
+        shiftDuration,
         clockInTime: formatTime(now),
         shiftStartTime: formatTime(shiftStart),
         shiftEndTime: formatTime(shiftEnd),
         nextShiftStartTime: formatTime(nextShiftStartTime),
-
         raw: {
           clockIn: now,
           shiftStart,
@@ -409,8 +427,7 @@ export const clockIn = async (req, res, next) => {
   }
 };
 
-// Clock-Out API
-
+// CLOCK-OUT
 export const clockOut = async (req, res, next) => {
   try {
     const { staticId, guardId } = req.body;
@@ -419,7 +436,6 @@ export const clockOut = async (req, res, next) => {
       return next(new ErrorHandler("staticId and guardId are required", 400));
     }
 
-    // Fetch assignment
     const assignment = await StaticGuards.findOne({
       where: { staticId, guardId },
       include: [{ model: Static, as: "static" }],
@@ -443,62 +459,77 @@ export const clockOut = async (req, res, next) => {
     const shiftStart = new Date(shift.startTime);
     const shiftEnd = new Date(shift.endTime);
     const clockIn = new Date(assignment.clockInTime);
-    const clockOut = now;
 
+    let clockOut = now;
     let warnings = [];
     let status = "completed";
 
-    // 1️⃣ CHECK IF GUARD IS CLOCKING OUT EARLY
+    // 1️⃣ EDGE CASE 1 — AUTO CLOCK OUT 1 MIN BEFORE NEXT SHIFT
+    const nextShift = await StaticGuards.findOne({
+      where: { guardId },
+      include: [{ model: Static, as: "static" }],
+      order: [[{ model: Static, as: "static" }, "startTime", "ASC"]],
+    });
+
+    if (nextShift) {
+      const nextStart = new Date(nextShift.static.startTime);
+
+      // If next shift starts exactly when this one ends
+      if (nextStart.getTime() === shiftEnd.getTime()) {
+        // Auto clock out at shiftEnd - 1 minute
+        const autoClockOut = new Date(shiftEnd.getTime() - 1 * 60 * 1000);
+
+        if (now > autoClockOut) {
+          clockOut = autoClockOut;
+          warnings.push(
+            `Auto Clock-Out applied at ${formatTime(autoClockOut)} due to immediate next shift.`
+          );
+        }
+      }
+    }
+
+    // 2️⃣ CLOCKING OUT EARLY
     if (clockOut < shiftEnd) {
       warnings.push("Shift hours are not completed.");
       status = "ended_early";
     }
 
-    // 2️⃣ CALCULATE TOTAL HOURS WORKED
+    // 3️⃣ TOTAL HOURS WORKED
     const totalMs = clockOut - clockIn;
     const totalHours = Number((totalMs / (1000 * 60 * 60)).toFixed(2));
 
-    // 3️⃣ CALCULATE OVERTIME
+    // 4️⃣ OVERTIME
     let overtimeHours = 0;
-
     if (clockOut > shiftEnd) {
       const overtimeMs = clockOut - shiftEnd;
       overtimeHours = Number((overtimeMs / (1000 * 60 * 60)).toFixed(2));
       status = "overtime";
     }
 
-    // 4️⃣ SAVE CLOCK-OUT DATA
+    // 5️⃣ SAVE CLOCK-OUT
     assignment.clockOutTime = clockOut;
     assignment.totalHours = totalHours;
     assignment.status = status;
     await assignment.save();
 
-    // -----------------------------
-    // 5️⃣ FINAL RESPONSE
-    // -----------------------------
     return res.status(200).json({
       success: true,
       message: "Clock-Out successful",
       warnings,
       data: {
         shiftDate: formatDate(shiftStart),
-
-        // Normalized times
         clockInTime: formatTime(clockIn),
         clockOutTime: formatTime(clockOut),
         shiftStartTime: formatTime(shiftStart),
         shiftEndTime: formatTime(shiftEnd),
-
         totalHours,
         overtimeHours,
         status,
-
-        // raw timestamps for DB or logs
         raw: {
           clockInTime: clockIn,
           clockOutTime: clockOut,
           shiftStartTime: shift.startTime,
-          shiftEndTime: shift.endTime
+          shiftEndTime: shift.endTime,
         }
       },
     });
@@ -512,6 +543,7 @@ export const clockOut = async (req, res, next) => {
     });
   }
 };
+
 
 
 
