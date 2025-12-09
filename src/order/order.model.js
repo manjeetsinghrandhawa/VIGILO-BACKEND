@@ -13,6 +13,7 @@ const Order = sequelize.define(
     serviceType: {
       type: DataTypes.ENUM(
         "static",
+        "patrol",
         "premiumSecurity",
         "standardPatrol",
         "24/7Monitoring",
@@ -24,6 +25,12 @@ const Order = sequelize.define(
         notEmpty: { msg: "Service type is required" },
       },
     },
+   locationName: {
+  type: DataTypes.STRING,
+  allowNull: true,   // <-- FIX
+},
+
+
     locationAddress: {
       type: DataTypes.STRING,
       allowNull: false,
@@ -36,10 +43,10 @@ const Order = sequelize.define(
       },
     },
      siteService: {
-    type: DataTypes.GEOGRAPHY('POINT', 4326), 
+ type: DataTypes.GEOGRAPHY('POINT', 4326), 
     allowNull: false,
     comment: "Stores latitude and longitude",
-  },
+},
     guardsRequired: {
       type: DataTypes.INTEGER,
       allowNull: false,

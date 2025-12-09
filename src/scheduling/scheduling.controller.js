@@ -138,7 +138,7 @@ export const getAllSchedules = async (req, res, next) => {
          {
       model: Order,
       as:"order",
-      attributes: ["locationAddress"],  // Fetch order name here
+      attributes: ["locationName","locationAddress"],  // Fetch order name here
     },
   {
     model: User,
@@ -195,6 +195,7 @@ export const getAllSchedules = async (req, res, next) => {
       updatedShifts.push({
         id: shift.id,
         orderId: shift.orderId,
+        orderLocationName: shift.order?.locationName || null, // NEW FIELD
         orderLocationAddress: shift.order?.locationAddress || null,   // NEW FIELD
         // date MUST be from UTC startTime WITHOUT timezone conversion
         date: moment.utc(shift.startTime).format("YYYY-MM-DD"),

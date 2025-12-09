@@ -12,6 +12,7 @@ import { Op } from "sequelize";
 export const createOrder = catchAsyncError(async (req, res, next) => {
   const { 
     serviceType, 
+    locationName,
     locationAddress, 
     siteService, 
     guardsRequired, 
@@ -33,7 +34,7 @@ export const createOrder = catchAsyncError(async (req, res, next) => {
     return next(new ErrorHandler("User not found", StatusCodes.NOT_FOUND));
   }
 
-  if (!serviceType || !locationAddress || !siteService || !guardsRequired || !startDate) {
+  if (!serviceType ||!locationName || !locationAddress || !siteService || !guardsRequired || !startDate) {
     return next(new ErrorHandler("Required fields are missing", StatusCodes.BAD_REQUEST));
   }
 
@@ -53,6 +54,7 @@ const sitePoint = sequelize.literal(
   const newOrder = await Order.create({
     userId,
     serviceType,
+    locationName,
     locationAddress,
     siteService: sitePoint,
     guardsRequired,
