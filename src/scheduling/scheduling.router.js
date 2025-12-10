@@ -19,7 +19,7 @@ router.post("/createSchedule",auth,isAdmin, createSchedule);
 router.get("/getAllSchedules",auth,isAdmin, getAllSchedules);
 
 //to delete a schedule by ID
-router.post("/deleteSchedule/:id",auth,isAdmin, deleteSchedule );
+router.post("/deleteSchedule",auth,isAdmin, deleteSchedule );
 
 //clock in a shift by guard
 router.post("/clockIn",auth,isGaurd,clockIn );

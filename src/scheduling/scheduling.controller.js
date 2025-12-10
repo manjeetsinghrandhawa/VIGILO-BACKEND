@@ -255,7 +255,7 @@ export const deleteSchedule = async (req, res) => {
       });
     }
 
-    const schedule = await Scheduling.findByPk(id);
+    const schedule = await Static.findByPk(id);
 
     if (!schedule) {
       return res.status(404).json({
