@@ -268,11 +268,28 @@ export const getAllOrders = catchAsyncError(async (req, res, next) => {
   }
 
   const { count, rows: orders } = await Order.findAndCountAll({
-    where: whereCondition,
-    order: [["createdAt", "DESC"]],
-    limit,
-    offset,
-  });
+  where: whereCondition,
+  order: [["createdAt", "DESC"]],
+  limit,
+  offset,
+  attributes: [
+    "id",
+    "status",
+    "serviceType",
+    "locationName",       // ← ADD THIS
+    "locationAddress",
+    "guardsRequired",
+    "startDate",
+    "endDate",
+    "startTime",
+    "endTime",
+    "images",
+    "createdAt",
+    "updatedAt",
+    "siteService",         // ← Add this too
+  ]
+});
+
   
 
   res.status(StatusCodes.OK).json({
