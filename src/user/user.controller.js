@@ -12,6 +12,7 @@ import StaticGuards from "../shift/staticGuards.model.js";
 import Order from "../order/order.model.js";
 
 // Register User
+// Register User
 export const registerUser = catchAsyncError(async (req, res, next) => {
   const { name, email, password, address, mobile, avatar } = req.body;
 
@@ -24,20 +25,16 @@ export const registerUser = catchAsyncError(async (req, res, next) => {
     );
   }
 
-  // 🔢 Generate OTP
-  const otp = Math.floor(1000 + Math.random() * 9000);
-  const expireIn = Date.now() + 5 * 60 * 1000;
-
   const checkUser = await userVerifyModel.findOne({
-    where: { email, type: "register" },
+    where: { email, type: "register" }
   });
 
+  // 🔁 If user exists but not verified
   if (checkUser) {
     const user = await userModel.findOne({ where: { email } });
 
     if (!user.isVerified) {
       const hashedPassword = await bcrypt.hash(password, 10);
-
       user.name = name;
       user.password = hashedPassword;
       user.address = address;
@@ -45,17 +42,16 @@ export const registerUser = catchAsyncError(async (req, res, next) => {
       if (avatar) user.avatar = avatar;
       await user.save();
 
-      // ✅ Update OTP dynamically
-      checkUser.otp = otp;
+      const expireIn = Date.now() + 5 * 60 * 1000;
+
+      checkUser.otp = 1111;
       checkUser.expireIn = expireIn;
       await checkUser.save();
-
-      // await sendOtpEmail(email, name, otp);
 
       return res.status(StatusCodes.OK).json({
         success: true,
         message: `User details updated and new OTP sent to ${email}`,
-        otp, // ✅ OTP in response
+        otp: 1111 // ✅ added
       });
     } else {
       return next(
@@ -67,9 +63,8 @@ export const registerUser = catchAsyncError(async (req, res, next) => {
     }
   }
 
-  // Hash password
+  // 🆕 New user registration
   const hashedPassword = await bcrypt.hash(password, 10);
-
   const user = await userModel.create({
     name,
     email,
@@ -77,57 +72,67 @@ export const registerUser = catchAsyncError(async (req, res, next) => {
     role: "user",
     mobile,
     avatar,
-    address,
+    address
   });
 
-  // ✅ Store random OTP
+  const expireIn = Date.now() + 5 * 60 * 1000;
+
   await userVerifyModel.create({
     email,
-    otp,
+    otp: 1111,
     expireIn,
-    type: "register",
+    type: "register"
   });
-
-  // await sendOtpEmail(email, name, otp);
 
   res.status(StatusCodes.OK).json({
     success: true,
     message: `OTP sent successfully to ${email}`,
-    otp, // ✅ OTP in response
+    otp: 1111 // ✅ added
   });
 });
 
 
+
 export const registerGaurd = catchAsyncError(async (req, res, next) => {
-  const { name, email, password ,address , mobile, avatar} = req.body;
+  const { name, email, password, address, mobile, avatar } = req.body;
+
   if (!name || !email || !password || !address) {
-    return next(new ErrorHandler("Name, email, password, and address are required fields.",StatusCodes.BAD_REQUEST));
+    return next(
+      new ErrorHandler(
+        "Name, email, password, and address are required fields.",
+        StatusCodes.BAD_REQUEST
+      )
+    );
   }
-  const checkUser = await userVerifyModel.findOne({ where: { email, type: "register" } });
+
+  const checkUser = await userVerifyModel.findOne({
+    where: { email, type: "register" }
+  });
+
+  // 🔁 Existing but unverified user
   if (checkUser) {
     const user = await userModel.findOne({ where: { email } });
+
     if (!user.isVerified) {
       const hashedPassword = await bcrypt.hash(password, 10);
       user.name = name;
       user.password = hashedPassword;
-      user.address= address;
+      user.address = address;
       if (mobile) user.mobile = mobile;
       if (avatar) user.avatar = avatar;
       await user.save();
 
-      const otp = Math.floor(1000 + Math.random() * 9000);
       const expireIn = Date.now() + 5 * 60 * 1000;
 
-       checkUser.otp = 1111;
+      checkUser.otp = 1111;
       checkUser.expireIn = expireIn;
       await checkUser.save();
-       // await verifyEmail(name, email, otp);
 
-       return res.status(StatusCodes.OK).json({
+      return res.status(StatusCodes.OK).json({
         success: true,
         message: `User details updated and new OTP sent to ${email}`,
+        otp: 1111 // ✅ added
       });
-      ;
     } else {
       return next(
         new ErrorHandler(
@@ -138,7 +143,7 @@ export const registerGaurd = catchAsyncError(async (req, res, next) => {
     }
   }
 
-  // Hash password
+  // 🆕 New guard registration
   const hashedPassword = await bcrypt.hash(password, 10);
   const user = await userModel.create({
     name,
@@ -147,21 +152,25 @@ export const registerGaurd = catchAsyncError(async (req, res, next) => {
     role: "guard",
     mobile,
     avatar,
-    address,
+    address
   });
-  const otp = Math.floor(1000 + Math.random() * 9000);
+
   const expireIn = Date.now() + 5 * 60 * 1000;
 
-  await userVerifyModel.create({ email, otp: 1111, expireIn, type: "register" });
-
-  // Send OTP email
- // await verifyEmail(name, email, otp);
+  await userVerifyModel.create({
+    email,
+    otp: 1111,
+    expireIn,
+    type: "register"
+  });
 
   res.status(StatusCodes.OK).json({
-    message: `OTP sent successfully to ${email}`,
     success: true,
+    message: `OTP sent successfully to ${email}`,
+    otp: 1111 // ✅ added
   });
 });
+
 
 export const createGuardByAdmin = catchAsyncError(async (req, res, next) => {
   const { name, email, password, address, mobile, avatar } = req.body;
@@ -255,26 +264,38 @@ export const resendOtp = catchAsyncError(async (req, res, next) => {
   const { email } = req.body;
 
   if (!email) {
-    return next(new ErrorHandler("Email is required", StatusCodes.BAD_REQUEST));
+    return next(
+      new ErrorHandler("Email is required", StatusCodes.BAD_REQUEST)
+    );
   }
 
-  const otp = Math.floor(1000 + Math.random() * 9000);
   const expireIn = Date.now() + 5 * 60 * 1000;
+  const otp = 1111; // ✅ static OTP
 
-  const checkUser = await userVerifyModel.findOne({ where: { email, type: "register" } });
+  const checkUser = await userVerifyModel.findOne({
+    where: { email, type: "register" }
+  });
+
   if (checkUser) {
-    await checkUser.update({ otp: 1111, expireIn });
+    await checkUser.update({ otp, expireIn });
   } else {
-    await userVerifyModel.create({ email, otp: 1111, expireIn, type: "register" });
+    await userVerifyModel.create({
+      email,
+      otp,
+      expireIn,
+      type: "register"
+    });
   }
 
-  //await verifyEmail("User", email, otp);
+  // await verifyEmail("User", email, otp);
 
   res.status(StatusCodes.OK).json({
     success: true,
     message: "OTP sent successfully",
+    otp // ✅ included in response
   });
 });
+
 
 // User Login
 export const userLogin = catchAsyncError(async (req, res, next) => {
@@ -358,32 +379,49 @@ export const forgotPassword = catchAsyncError(async (req, res, next) => {
   const { email } = req.body;
 
   if (!email) {
-    return next(new ErrorHandler("Email is required", StatusCodes.BAD_REQUEST));
+    return next(
+      new ErrorHandler("Email is required", StatusCodes.BAD_REQUEST)
+    );
   }
 
   const user = await userModel.findOne({ where: { email } });
   if (!user) {
-    return next(new ErrorHandler("User not found", StatusCodes.NOT_FOUND));
+    return next(
+      new ErrorHandler("User not found", StatusCodes.NOT_FOUND)
+    );
   }
 
-  const otp = Math.floor(1000 + Math.random() * 9000);
+  const otp = 1111; // ✅ static OTP
   const expireIn = Date.now() + 5 * 60 * 1000;
 
-  const checkOtp = await userVerifyModel.findOne({ where: { email, type: "forgotPassword" } });
+  const checkOtp = await userVerifyModel.findOne({
+    where: { email, type: "forgotPassword" }
+  });
 
   if (checkOtp) {
-    await checkOtp.update({ otp: 1111, expireIn, isUsed: false });
+    await checkOtp.update({
+      otp,
+      expireIn,
+      isUsed: false
+    });
   } else {
-    await userVerifyModel.create({ email, otp: 1111, expireIn, type: "forgotPassword" });
+    await userVerifyModel.create({
+      email,
+      otp,
+      expireIn,
+      type: "forgotPassword"
+    });
   }
 
-  //await verifyEmail(user.name, email, otp);
+  // await verifyEmail(user.name, email, otp);
 
   res.status(StatusCodes.OK).json({
     success: true,
     message: `OTP sent to ${email} for password reset`,
+    otp // ✅ included in response
   });
 });
+
 
 
 export const verifyForgotPasswordOtp = catchAsyncError(async (req, res, next) => {
@@ -416,27 +454,42 @@ export const resendForgotPasswordOtp = catchAsyncError(async (req, res, next) =>
 
   const user = await userModel.findOne({ where: { email } });
   if (!user) {
-    return next(new ErrorHandler("User not found", StatusCodes.NOT_FOUND));
+    return next(
+      new ErrorHandler("User not found", StatusCodes.NOT_FOUND)
+    );
   }
 
-  const otp = Math.floor(1000 + Math.random() * 9000);
+  const otp = 1111; // ✅ static OTP
   const expireIn = Date.now() + 5 * 60 * 1000;
 
-  const checkOtp = await userVerifyModel.findOne({ where: { email, type: "forgotPassword" } });
+  const checkOtp = await userVerifyModel.findOne({
+    where: { email, type: "forgotPassword" }
+  });
 
   if (checkOtp) {
-    await checkOtp.update({ otp: 1111, expireIn, isUsed: false });
+    await checkOtp.update({
+      otp,
+      expireIn,
+      isUsed: false
+    });
   } else {
-    await userVerifyModel.create({ email, otp: 1111, expireIn, type: "forgotPassword" });
+    await userVerifyModel.create({
+      email,
+      otp,
+      expireIn,
+      type: "forgotPassword"
+    });
   }
 
-  //await verifyEmail(user.name, email, otp);
+  // await verifyEmail(user.name, email, otp);
 
   res.status(StatusCodes.OK).json({
     success: true,
     message: "OTP resent successfully",
+    otp // ✅ added in response
   });
 });
+
 
 
 export const setNewPassword = catchAsyncError(async (req, res, next) => {
