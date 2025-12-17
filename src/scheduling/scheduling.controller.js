@@ -243,6 +243,146 @@ export const getAllSchedules = async (req, res, next) => {
   }
 };
 
+export const getMySchedules = async (req, res, next) => {
+  try {
+    const guardId = req.user?.id;
+
+    if (!guardId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
+
+    let { page = 1, limit = 20, status } = req.query;
+
+    page = parseInt(page);
+    limit = parseInt(limit);
+    if (isNaN(page) || page < 1) page = 1;
+    if (isNaN(limit) || limit < 1) limit = 20;
+
+    const offset = (page - 1) * limit;
+
+    const tz = getTimeZone();
+    const now = moment().tz(tz);
+    const allowedStatuses = ["upcoming", "ongoing", "completed"];
+
+    const { count, rows: shifts } = await Static.findAndCountAll({
+      attributes: [
+        "id",
+        "orderId",
+        "type",
+        "description",
+        "startTime",
+        "endTime",
+        "status",
+        "createdAt",
+      ],
+      include: [
+        {
+          model: Order,
+          as: "order",
+          attributes: ["locationName", "locationAddress"],
+        },
+        {
+          model: User,
+          as: "guards",
+          where: { id: guardId }, // 🔥 FILTER BY LOGGED-IN GUARD
+          attributes: ["id", "name", "email"],
+          through: {
+            attributes: ["status", "createdAt"],
+          },
+          required: true, // 🔥 IMPORTANT
+        },
+      ],
+      order: [["startTime", "ASC"]],
+      limit,
+      offset,
+    });
+
+    if (!shifts.length) {
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        message: "No shifts found",
+        data: [],
+        pagination: {
+          total: 0,
+          page,
+          totalPages: 0,
+          limit,
+        },
+      });
+    }
+
+    const formattedShifts = [];
+
+    for (const shift of shifts) {
+      const startLocal = moment(shift.startTime).tz(tz);
+      const endLocal = moment(shift.endTime).tz(tz);
+
+      let dynamicStatus = shift.status;
+
+      if (now.isBefore(startLocal)) dynamicStatus = "upcoming";
+      else if (now.isBetween(startLocal, endLocal)) dynamicStatus = "ongoing";
+      else if (now.isSameOrAfter(endLocal)) dynamicStatus = "completed";
+
+      if (shift.status !== dynamicStatus) {
+        try {
+          await shift.update({ status: dynamicStatus });
+        } catch (err) {
+          console.warn(`Shift ${shift.id} status update failed`);
+        }
+      }
+
+      const guard = shift.guards[0]; // only one guard here
+
+      formattedShifts.push({
+        id: shift.id,
+        orderId: shift.orderId,
+        orderLocationName: shift.order?.locationName || null,
+        orderLocationAddress: shift.order?.locationAddress || null,
+        date: moment.utc(shift.startTime).format("YYYY-MM-DD"),
+        type: shift.type,
+        description: shift.description,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        status: dynamicStatus,
+        createdAt: shift.createdAt,
+        guard: {
+          id: guard.id,
+          name: guard.name,
+          email: guard.email,
+          assignmentStatus: guard.StaticGuards?.status || "pending",
+          assignedAt: guard.StaticGuards?.createdAt || null,
+        },
+      });
+    }
+
+    const filteredShifts =
+      status && allowedStatuses.includes(status)
+        ? formattedShifts.filter((s) => s.status === status)
+        : formattedShifts;
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "My shifts fetched successfully",
+      data: filteredShifts,
+      pagination: {
+        total: count,
+        page,
+        totalPages: Math.ceil(count / limit),
+        limit,
+      },
+    });
+  } catch (error) {
+    console.error("GET MY SCHEDULES ERROR:", error.stack || error);
+    return res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+
 // Delete a schedule by ID
 export const deleteSchedule = async (req, res) => {
   try {

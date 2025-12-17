@@ -1,6 +1,7 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../../config/database.js";
 import Order from "../order/order.model.js";
+import User from "../user/user.model.js";
 
 const Static = sequelize.define(
   "Static",
@@ -56,12 +57,22 @@ const Static = sequelize.define(
 );
 
 // Association: one Order → many Statics
-Order.hasMany(Static, { foreignKey: "orderId", onDelete: "CASCADE" });
-Static.belongsTo(Order, { foreignKey: "orderId" });
+Order.hasMany(Static, {
+  foreignKey: "orderId",
+  as: "statics",
+  onDelete: "CASCADE",
+});
+
 Static.belongsTo(Order, {
   foreignKey: "orderId",
-  as: "order"
+  as: "order",
 });
+
+
+
+
+
+
 
 
 export default Static;

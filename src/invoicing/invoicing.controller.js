@@ -4,7 +4,7 @@ import Invoice from "./invoicing.model.js";
 import InvoiceItem from "./invoiceItem.model.js";
 import Alarm from "../alarm/alarm.model.js";
 // import Patrol from "../models/patrol.model.js";
-// import ErrorHandler from "../utils/errorHandler.js";
+import ErrorHandler from "../../utils/errorHandler.js";
 // import catchAsyncError from "../middlewares/catchAsyncError.js";
 import userModel from "../user/user.model.js";
 
@@ -52,7 +52,7 @@ export const generateInvoice = async (req, res, next) => {
 
     const invoiceItems = [];
 
-    // 2️⃣ Completed Alarms → Invoice Items
+    // Completed Alarms → Invoice Items
     if (alarmIds.length > 0) {
       const alarms = await Alarm.findAll({
         where: {
@@ -116,18 +116,21 @@ export const generateInvoice = async (req, res, next) => {
       });
     }
 
-    // 5️⃣ Save all invoice items
-    await InvoiceItem.bulkCreate(invoiceItems);
+     // ✅ 6️⃣ Fetch FULL invoice with items
+    const fullInvoice = await Invoice.findByPk(invoice.id, {
+      include: [
+        {
+          model: InvoiceItem,
+          as: "items"
+        }
+      ]
+    });
 
+    // ✅ 7️⃣ Return everything
     res.status(StatusCodes.CREATED).json({
       success: true,
       message: "Invoice generated successfully",
-      data: {
-        invoiceId: invoice.id,
-        invoiceNumber: invoice.invoiceNumber,
-        totalItems: invoiceItems.length,
-        totalAmount: invoice.totalAmount
-      }
+      data: fullInvoice
     });
 
   } catch (error) {

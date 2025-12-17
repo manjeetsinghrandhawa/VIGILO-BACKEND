@@ -1,5 +1,6 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../../config/database.js";
+// import Invoice from "./invoicing.model.js";
 
 const InvoiceItem = sequelize.define(
   "InvoiceItem",
@@ -53,6 +54,16 @@ const InvoiceItem = sequelize.define(
   }
 );
 
+/* ✅ SAFE association */
+InvoiceItem.associate = () => {
+  const { Invoice } = sequelize.models;
+
+  InvoiceItem.belongsTo(Invoice, {
+    foreignKey: "invoiceId",
+    as: "invoice",
+    onDelete: "CASCADE",
+  });
+};
 
 
 

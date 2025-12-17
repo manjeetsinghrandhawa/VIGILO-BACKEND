@@ -1,5 +1,6 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../../config/database.js";
+import User from "../user/user.model.js";
 
 const Alarm = sequelize.define(
   "Alarm",
@@ -125,5 +126,21 @@ const Alarm = sequelize.define(
     paranoid: true, // soft delete
   }
 );
+
+Alarm.belongsToMany(User, {
+  through: "AlarmGuards",
+  foreignKey: "alarmId",
+  otherKey: "userId",
+  as: "guards",
+  onDelete: "CASCADE",
+});
+
+User.belongsToMany(Alarm, {
+  through: "AlarmGuards",
+  foreignKey: "userId",
+  otherKey: "alarmId",
+  as: "alarms",
+  onDelete: "CASCADE",
+});
 
 export default Alarm;

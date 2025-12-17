@@ -1,5 +1,5 @@
 import express from "express";
-import { createAlarm } from "./";
+import { createAlarm } from "./alarm.controller.js";
 import { auth, isGaurd, isAdmin } from "../../middlewares/auth.js";
 
 const router = express.Router();

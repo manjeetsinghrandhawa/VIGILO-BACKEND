@@ -2,6 +2,7 @@ import express from "express";
 import {
   createSchedule,
   getAllSchedules,
+  getMySchedules,
   deleteSchedule,
   clockIn,
   clockOut
@@ -17,6 +18,8 @@ router.post("/createSchedule",auth,isAdmin, createSchedule);
 
 //For fetching weekly schedules with guard and site details
 router.get("/getAllSchedules",auth,isAdmin, getAllSchedules);
+
+router.get("/getMySchedules",auth,isGaurd, getMySchedules);
 
 //to delete a schedule by ID
 router.post("/deleteSchedule",auth,isAdmin, deleteSchedule );
