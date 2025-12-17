@@ -13,35 +13,50 @@ import Order from "../order/order.model.js";
 
 // Register User
 export const registerUser = catchAsyncError(async (req, res, next) => {
-  const { name, email, password ,address , mobile, avatar} = req.body;
+  const { name, email, password, address, mobile, avatar } = req.body;
+
   if (!name || !email || !password || !address) {
-    return next(new ErrorHandler("Name, email, password, and address are required fields.",StatusCodes.BAD_REQUEST));
+    return next(
+      new ErrorHandler(
+        "Name, email, password, and address are required fields.",
+        StatusCodes.BAD_REQUEST
+      )
+    );
   }
-  const checkUser = await userVerifyModel.findOne({ where: { email, type: "register" } });
+
+  // 🔢 Generate OTP
+  const otp = Math.floor(1000 + Math.random() * 9000);
+  const expireIn = Date.now() + 5 * 60 * 1000;
+
+  const checkUser = await userVerifyModel.findOne({
+    where: { email, type: "register" },
+  });
+
   if (checkUser) {
     const user = await userModel.findOne({ where: { email } });
+
     if (!user.isVerified) {
       const hashedPassword = await bcrypt.hash(password, 10);
+
       user.name = name;
       user.password = hashedPassword;
-      user.address= address;
+      user.address = address;
       if (mobile) user.mobile = mobile;
       if (avatar) user.avatar = avatar;
       await user.save();
 
-      const otp = Math.floor(1000 + Math.random() * 9000);
-      const expireIn = Date.now() + 5 * 60 * 1000;
-
-       checkUser.otp = 1111;
+      // ✅ Update OTP dynamically
+      checkUser.otp = otp;
       checkUser.expireIn = expireIn;
       await checkUser.save();
-       // await verifyEmail(name, email, otp);
 
-       return res.status(StatusCodes.OK).json({
+      // await sendOtpEmail(email, name, otp);
+
+      return res.status(StatusCodes.OK).json({
         success: true,
         message: `User details updated and new OTP sent to ${email}`,
+        otp, // ✅ OTP in response
       });
-      ;
     } else {
       return next(
         new ErrorHandler(
@@ -54,6 +69,7 @@ export const registerUser = catchAsyncError(async (req, res, next) => {
 
   // Hash password
   const hashedPassword = await bcrypt.hash(password, 10);
+
   const user = await userModel.create({
     name,
     email,
@@ -63,19 +79,24 @@ export const registerUser = catchAsyncError(async (req, res, next) => {
     avatar,
     address,
   });
-  const otp = Math.floor(1000 + Math.random() * 9000);
-  const expireIn = Date.now() + 5 * 60 * 1000;
 
-  await userVerifyModel.create({ email, otp: 1111, expireIn, type: "register" });
+  // ✅ Store random OTP
+  await userVerifyModel.create({
+    email,
+    otp,
+    expireIn,
+    type: "register",
+  });
 
-  // Send OTP email
- // await verifyEmail(name, email, otp);
+  // await sendOtpEmail(email, name, otp);
 
   res.status(StatusCodes.OK).json({
-    message: `OTP sent successfully to ${email}`,
     success: true,
+    message: `OTP sent successfully to ${email}`,
+    otp, // ✅ OTP in response
   });
 });
+
 
 export const registerGaurd = catchAsyncError(async (req, res, next) => {
   const { name, email, password ,address , mobile, avatar} = req.body;

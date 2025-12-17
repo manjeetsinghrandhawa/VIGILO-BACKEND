@@ -9,7 +9,7 @@ import orderRoute from "./src/order/order.router.js";
 import shiftRoute from "./src/shift/shift.router.js";    
 import incidentRoute from "./src/incident/incident.router.js"; 
 import schedulingRoute from "./src/scheduling/scheduling.router.js";
-
+import invoicingRoute from "./src/invoicing/invoicing.router.js";
 
 dotenv.config({ path: "./config/.env" });
 
@@ -30,6 +30,7 @@ app.use("/api/v1/orders", orderRoute);
 app.use("/api/v1/shifts", shiftRoute);
 app.use("/api/v1/incidents", incidentRoute);
 app.use("/api/v1/scheduling", schedulingRoute);
+app.use("/api/v1/invoicing", invoicingRoute);
 
 app.get("/", (req, res) => res.json({ anc: "abc" }));
 
