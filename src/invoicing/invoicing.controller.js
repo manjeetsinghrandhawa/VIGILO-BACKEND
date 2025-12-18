@@ -14,6 +14,7 @@ export const generateInvoice = async (req, res, next) => {
       clientId,
       billingMonth,
       billingYear,
+      issueDate,
       dueDate,
       alarmIds = [],
       patrolIds = [],
@@ -41,6 +42,7 @@ export const generateInvoice = async (req, res, next) => {
       clientId,
       billingMonth,
       billingYear,
+      issueDate,
       dueDate,
       items,
       subtotal,
@@ -151,6 +153,7 @@ export const getAllInvoice = async (req, res, next) => {
       include: [
         {
           model: userModel,
+           as: "Client",
           attributes: ["id", "name", "email"]
         },
         {
@@ -186,6 +189,7 @@ export const getAllInvoice = async (req, res, next) => {
 
         amount: invoice.totalAmount,
         status: invoice.status,
+        issueDate: invoice.issueDate,
         dueDate: invoice.dueDate,
         paidDate: invoice.paidAt || null
       };
@@ -207,3 +211,85 @@ export const getAllInvoice = async (req, res, next) => {
     );
   }
 };
+
+export const getInvoiceById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const invoice = await Invoice.findByPk(id, {
+      include: [
+        {
+          model: userModel,
+          as: "Client",
+          attributes: ["id", "name", "email"],
+        },
+        {
+          model: InvoiceItem,
+          as: "items",
+          attributes: [
+            "id",
+            "serviceName",
+            "itemType",
+            "quantity",
+            "unitPrice",
+            "totalAmount",
+          ],
+        },
+      ],
+    });
+
+    if (!invoice) {
+      return next(
+        new ErrorHandler("Invoice not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    // 🔹 Format response exactly for UI
+    const response = {
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+
+      billTo: {
+        clientName: invoice.Client?.name || "-",
+        clientCode: invoice.Client?.email || "-", 
+      },
+
+      billingPeriod: `${invoice.billingMonth} ${invoice.billingYear}`,
+
+      invoiceDetails: {
+        issueDate: invoice.issueDate,
+        dueDate: invoice.dueDate,
+        paidDate: invoice.paidAt || null,
+        status: invoice.status,
+      },
+
+      services: invoice.InvoiceItems.map(item => ({
+        id: item.id,
+        serviceName: item.serviceName,
+        type: item.itemType,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        total: item.totalAmount,
+      })),
+
+      totalAmount: invoice.totalAmount,
+      createdAt: invoice.createdAt,
+      updatedAt: invoice.updatedAt,
+    };
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: response,
+    });
+
+  } catch (error) {
+    console.error("Get Invoice By ID Error:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to fetch invoice details",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+

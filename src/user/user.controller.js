@@ -646,6 +646,7 @@ export const getGuardById = catchAsyncError(async (req, res, next) => {
       },
       {
         model: Order,
+        as: "order",
         attributes: ["id", "serviceType", "locationName","locationAddress", "status"],
       },
     ],

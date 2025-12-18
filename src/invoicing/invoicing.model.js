@@ -1,6 +1,8 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../../config/database.js";
 // import InvoiceItem from "./invoiceItem.model.js";
+import userModel from "../user/user.model.js";
+const User = userModel;
 
 const Invoice = sequelize.define(
   "Invoice",
@@ -18,9 +20,15 @@ const Invoice = sequelize.define(
     },
 
     clientId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-    },
+  type: DataTypes.UUID,
+  allowNull: false,
+  references: {
+    model: User,
+    key: "id",
+  },
+  onDelete: "CASCADE",
+},
+
 
     billingMonth: {
       type: DataTypes.INTEGER, // 1–12
@@ -75,13 +83,18 @@ const Invoice = sequelize.define(
 
 /* ✅ SAFE association */
 Invoice.associate = () => {
-  const { InvoiceItem } = sequelize.models;
+  const { InvoiceItem, User } = sequelize.models;
 
   Invoice.hasMany(InvoiceItem, {
     foreignKey: "invoiceId",
     as: "items",
     onDelete: "CASCADE",
   });
+
+  Invoice.belongsTo(User, {
+  foreignKey: "clientId",
+  as: "Client",
+});
 };
 
 

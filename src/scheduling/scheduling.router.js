@@ -3,6 +3,8 @@ import {
   createSchedule,
   getAllSchedules,
   getMySchedules,
+  getMyUpcomingSchedules,
+  getMyNewShiftRequests,
   deleteSchedule,
   clockIn,
   clockOut
@@ -20,6 +22,10 @@ router.post("/createSchedule",auth,isAdmin, createSchedule);
 router.get("/getAllSchedules",auth,isAdmin, getAllSchedules);
 
 router.get("/getMySchedules",auth,isGaurd, getMySchedules);
+
+router.get("/getMyUpcomingSchedules",auth, isGaurd, getMyUpcomingSchedules);
+
+router.get("/getMyNewShiftRequests",auth, isGaurd, getMyNewShiftRequests );
 
 //to delete a schedule by ID
 router.post("/deleteSchedule",auth,isAdmin, deleteSchedule );
