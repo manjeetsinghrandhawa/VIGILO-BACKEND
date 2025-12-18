@@ -2,6 +2,7 @@ import express from "express";
 import {
   createSchedule,
   getAllSchedules,
+  getMyAllShifts,
   getMySchedules,
   getMyUpcomingSchedules,
   getMyNewShiftRequests,
@@ -20,6 +21,8 @@ router.post("/createSchedule",auth,isAdmin, createSchedule);
 
 //For fetching weekly schedules with guard and site details
 router.get("/getAllSchedules",auth,isAdmin, getAllSchedules);
+
+router.post("/getMyAllShifts",auth,isGaurd, getMyAllShifts);
 
 router.get("/getMySchedules",auth,isGaurd, getMySchedules);
 

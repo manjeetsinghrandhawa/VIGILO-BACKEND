@@ -187,60 +187,85 @@ export const getAllShifts = catchAsyncError(async (req, res, next) => {
 });
 
 
-export const respondToShift = catchAsyncError(async (req, res, next) => {
-  const userId = req.user?.id;
-  const { staticId } = req.params;
-  const { status } = req.body; 
+export const respondToShift = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+    const { staticId } = req.params;
+    const { status } = req.body;
 
-  if (!userId) {
-    return next(
-      new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
-    );
+    if (!userId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
+
+    if (!["accepted", "rejected"].includes(status)) {
+      return next(
+        new ErrorHandler(
+          "Invalid status. Use 'accepted' or 'rejected'.",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    // 1️⃣ Check if shift exists
+    const shift = await Static.findByPk(staticId);
+    if (!shift) {
+      return next(new ErrorHandler("Shift not found", StatusCodes.NOT_FOUND));
+    }
+
+    // 2️⃣ Check guard assignment
+    const staticGuard = await StaticGuards.findOne({
+      where: { staticId, guardId: userId },
+    });
+
+    if (!staticGuard) {
+      return next(
+        new ErrorHandler(
+          "You are not assigned to this shift",
+          StatusCodes.FORBIDDEN
+        )
+      );
+    }
+
+    // 3️⃣ Prevent re-response
+    if (["accepted", "rejected"].includes(staticGuard.status)) {
+      return next(
+        new ErrorHandler(
+          `You have already ${staticGuard.status} this shift`,
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    // 4️⃣ Update guard response
+    staticGuard.status = status;
+    await staticGuard.save();
+
+    // 5️⃣ Update shift status based on guard response
+    if (status === "accepted") {
+      await shift.update({ status: "upcoming" });
+    }
+
+    if (status === "rejected") {
+      await shift.update({ status: "cancelled" });
+    }
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: `Shift ${status} successfully`,
+      data: {
+        staticId,
+        guardId: userId,
+        guardStatus: staticGuard.status,
+        shiftStatus: shift.status,
+      },
+    });
+  } catch (error) {
+    next(error);
   }
+};
 
-  if (!["accepted", "rejected"].includes(status)) {
-    return next(
-      new ErrorHandler("Invalid status. Use 'accepted' or 'rejected'.", StatusCodes.BAD_REQUEST)
-    );
-  }
-
-  // Check if the shift exists
-  const shift = await Static.findByPk(staticId);
-  if (!shift) {
-    return next(new ErrorHandler("Shift not found", StatusCodes.NOT_FOUND));
-  }
-  // Check if guard is assigned to this shift
-  const staticGuard = await StaticGuards.findOne({
-    where: { staticId, guardId: userId },
-  });
-
-  if (!staticGuard) {
-    return next(
-      new ErrorHandler("You are not assigned to this shift", StatusCodes.FORBIDDEN)
-    );
-  }
-
-  // Prevent re-updating after response
-  if (["accepted", "rejected"].includes(staticGuard.status)) {
-    return next(
-      new ErrorHandler(`You have already ${staticGuard.status} this shift`, StatusCodes.BAD_REQUEST)
-    );
-  }
-
-  // Update guard’s status
-  staticGuard.status = status;
-  await staticGuard.save();
-
-  res.status(StatusCodes.OK).json({
-    success: true,
-    message: `Shift ${status} successfully`,
-    data: {
-      staticId,
-      guardId: userId,
-      status: staticGuard.status,
-    },
-  });
-});
 
 export const getStaticShiftById = catchAsyncError(async (req, res, next) => {
   const { id } = req.params;

@@ -64,7 +64,7 @@ const end = normalizedDate
       startTime: start,
       endTime: end,
       type: "static",
-      status: "upcoming",
+      status: "pending",
     });
 
     // Assign guards (create StaticGuards records)
@@ -110,13 +110,14 @@ const end = normalizedDate
   }
 };
 
-// Fetch weekly schedules with guard and site details
 export const getAllSchedules = async (req, res, next) => {
   try {
     const userId = req.user?.id;
 
     if (!userId) {
-      return next(new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED));
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
     }
 
     let { page = 1, limit, status } = req.query;
@@ -129,27 +130,35 @@ export const getAllSchedules = async (req, res, next) => {
     const offset = (page - 1) * limit;
     const tz = getTimeZone();
     const now = moment().tz(tz);
-    const allowedStatuses = ["upcoming", "ongoing", "completed"];
 
-    // Fetch shifts assigned to the logged-in guard
+    const allowedStatuses = ["pending", "upcoming", "ongoing", "completed", "cancelled"];
+
     const { count, rows: shifts } = await Static.findAndCountAll({
-      attributes: ["id", "orderId", "type", "description", "startTime", "endTime", "status", "createdAt"],
+      attributes: [
+        "id",
+        "orderId",
+        "type",
+        "description",
+        "startTime",
+        "endTime",
+        "status",
+        "createdAt",
+      ],
       include: [
-         {
-      model: Order,
-      as:"order",
-      attributes: ["locationName","locationAddress"],  // Fetch order name here
-    },
-  {
-    model: User,
-    as: "guards",
-    attributes: ["id", "name", "email"],
-    through: {
-      attributes: ["status", "createdAt"],
-    },
-  },
-],
-
+        {
+          model: Order,
+          as: "order",
+          attributes: ["locationName", "locationAddress"],
+        },
+        {
+          model: User,
+          as: "guards",
+          attributes: ["id", "name", "email"],
+          through: {
+            attributes: ["status", "createdAt"],
+          },
+        },
+      ],
       order: [["startTime", "ASC"]],
       limit,
       offset,
@@ -158,7 +167,7 @@ export const getAllSchedules = async (req, res, next) => {
     if (!shifts.length) {
       return res.status(StatusCodes.OK).json({
         success: true,
-        message: "No shifts found for this user",
+        message: "No shifts found",
         data: [],
         pagination: {
           total: 0,
@@ -169,59 +178,48 @@ export const getAllSchedules = async (req, res, next) => {
       });
     }
 
-    const updatedShifts = [];
-
-     for (const shift of shifts) {
-      // FOR STATUS CHECKING ONLY — we convert UTC → LOCAL here
+    const formattedShifts = shifts.map((shift) => {
+      // ⏱ Compute ONLY for UI (no DB update)
       const startLocal = moment(shift.startTime).tz(tz);
       const endLocal = moment(shift.endTime).tz(tz);
 
-      // Determine dynamic shift status
-      let dynamicStatus = shift.status;
+      let computedStatus = shift.status;
 
-      if (now.isBefore(startLocal)) dynamicStatus = "upcoming";
-      else if (now.isBetween(startLocal, endLocal)) dynamicStatus = "ongoing";
-      else if (now.isSameOrAfter(endLocal)) dynamicStatus = "completed";
-
-      // Update DB only if status changed
-      if (shift.status !== dynamicStatus) {
-        try {
-          await shift.update({ status: dynamicStatus });
-        } catch (uErr) {
-          console.warn(`Failed to update status for shift ${shift.id}:`, uErr.message);
-        }
+      if (shift.status === "upcoming") {
+        if (now.isBetween(startLocal, endLocal)) computedStatus = "ongoing";
+        else if (now.isSameOrAfter(endLocal)) computedStatus = "completed";
       }
 
-      updatedShifts.push({
+      return {
         id: shift.id,
         orderId: shift.orderId,
-        orderLocationName: shift.order?.locationName || null, // NEW FIELD
-        orderLocationAddress: shift.order?.locationAddress || null,   // NEW FIELD
-        // date MUST be from UTC startTime WITHOUT timezone conversion
+        orderLocationName: shift.order?.locationName || null,
+        orderLocationAddress: shift.order?.locationAddress || null,
         date: moment.utc(shift.startTime).format("YYYY-MM-DD"),
         type: shift.type,
         description: shift.description,
         startTime: shift.startTime,
         endTime: shift.endTime,
-        status: dynamicStatus,
+        status: shift.status,          // 🔒 DB status (unchanged)
+        displayStatus: computedStatus, // 👀 UI-only
         createdAt: shift.createdAt,
         guards: Array.isArray(shift.guards)
           ? shift.guards.map((g) => ({
               id: g.id,
               name: g.name,
               email: g.email,
-              StaticGuards: {
-                status: g.StaticGuards?.status || "pending",
-                createdAt: g.StaticGuards?.createdAt || null,
-              },
+              assignmentStatus: g.StaticGuards?.status || "pending",
+              assignedAt: g.StaticGuards?.createdAt || null,
             }))
           : [],
-      });
-    }
+      };
+    });
 
-    // Apply optional filter
+    // Optional filter
     const filteredShifts =
-      status && allowedStatuses.includes(status) ? updatedShifts.filter((s) => s.status === status) : updatedShifts;
+      status && allowedStatuses.includes(status)
+        ? formattedShifts.filter((s) => s.displayStatus === status)
+        : formattedShifts;
 
     return res.status(StatusCodes.OK).json({
       success: true,
@@ -235,13 +233,146 @@ export const getAllSchedules = async (req, res, next) => {
       },
     });
   } catch (error) {
-    console.error("GET ALL SCHEDULES ERROR:", error.stack || error);
+    console.error("GET ALL SCHEDULES ERROR:", error);
     return res.status(500).json({
-      status: "error",
+      success: false,
       message: error.message,
     });
   }
 };
+
+
+export const getMyAllShifts = async (req, res, next) => {
+  try {
+    const guardId = req.user?.id;
+
+    if (!guardId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
+
+    let { page = 1, limit = 20 } = req.query;
+    const { filter = "all" } = req.body;
+
+    page = parseInt(page);
+    limit = parseInt(limit);
+
+    if (isNaN(page) || page < 1) page = 1;
+    if (isNaN(limit) || limit < 1) limit = 20;
+
+    const offset = (page - 1) * limit;
+    const tz = getTimeZone();
+    const now = moment().tz(tz);
+
+    /**
+     * 🔥 FILTER LOGIC
+     */
+    let shiftWhere = {};
+    let guardThroughWhere = { guardId };
+
+    if (filter === "upcoming") {
+      shiftWhere.status = "upcoming";
+      guardThroughWhere.status = "accepted";
+    }
+
+    if (filter === "newRequests") {
+      shiftWhere.status = "pending";
+      guardThroughWhere.status = "pending";
+    }
+
+    // "all" → no extra conditions
+
+    const { count, rows: shifts } = await Static.findAndCountAll({
+      where: shiftWhere,
+      attributes: [
+        "id",
+        "orderId",
+        "type",
+        "description",
+        "startTime",
+        "endTime",
+        "status",
+        "createdAt",
+      ],
+      include: [
+        {
+          model: Order,
+          as: "order",
+          attributes: ["locationName", "locationAddress"],
+        },
+        {
+          model: User,
+          as: "guards",
+          where: { id: guardId },
+          attributes: ["id", "name", "email"],
+          through: {
+            where: guardThroughWhere,
+            attributes: ["status", "createdAt"],
+          },
+          required: true,
+        },
+      ],
+      order: [["startTime", "ASC"]],
+      limit,
+      offset,
+    });
+
+    const response = shifts.map((shift) => {
+      const startLocal = moment(shift.startTime).tz(tz);
+      const endLocal = moment(shift.endTime).tz(tz);
+
+      // Dynamic status for UI only
+      let dynamicStatus = shift.status;
+      if (now.isBetween(startLocal, endLocal)) dynamicStatus = "ongoing";
+      if (now.isSameOrAfter(endLocal)) dynamicStatus = "completed";
+
+      const guard = shift.guards[0];
+
+      return {
+        id: shift.id,
+        orderId: shift.orderId,
+        orderLocationName: shift.order?.locationName || null,
+        orderLocationAddress: shift.order?.locationAddress || null,
+        date: moment.utc(shift.startTime).format("YYYY-MM-DD"),
+        type: shift.type,
+        description: shift.description,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        status: dynamicStatus,
+        createdAt: shift.createdAt,
+        guard: {
+          id: guard.id,
+          name: guard.name,
+          email: guard.email,
+          assignmentStatus: guard.StaticGuards?.status,
+          assignedAt: guard.StaticGuards?.createdAt,
+        },
+      };
+    });
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Shifts fetched successfully",
+      filter,
+      data: response,
+      pagination: {
+        total: count,
+        page,
+        totalPages: Math.ceil(count / limit),
+        limit,
+      },
+    });
+  } catch (error) {
+    console.error("GET MY ALL SHIFTS ERROR:", error.stack || error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
 
 export const getMySchedules = async (req, res, next) => {
   try {
@@ -396,6 +527,7 @@ export const getMyUpcomingSchedules = async (req, res, next) => {
 
     page = parseInt(page);
     limit = parseInt(limit);
+
     if (isNaN(page) || page < 1) page = 1;
     if (isNaN(limit) || limit < 1) limit = 20;
 
@@ -405,6 +537,9 @@ export const getMyUpcomingSchedules = async (req, res, next) => {
     const now = moment().tz(tz);
 
     const { count, rows: shifts } = await Static.findAndCountAll({
+      where: {
+        status: "upcoming", // ✅ ONLY upcoming shifts
+      },
       attributes: [
         "id",
         "orderId",
@@ -427,6 +562,7 @@ export const getMyUpcomingSchedules = async (req, res, next) => {
           where: { id: guardId },
           attributes: ["id", "name", "email"],
           through: {
+            where: { status: "accepted" }, // ✅ guard must have accepted
             attributes: ["status", "createdAt"],
           },
           required: true,
@@ -442,17 +578,8 @@ export const getMyUpcomingSchedules = async (req, res, next) => {
     for (const shift of shifts) {
       const startLocal = moment(shift.startTime).tz(tz);
 
-      // 🔥 UPCOMING ONLY
+      // ✅ Extra safety: ensure future shifts only
       if (!now.isBefore(startLocal)) continue;
-
-      // Optional: keep DB status in sync
-      if (shift.status !== "upcoming") {
-        try {
-          await shift.update({ status: "upcoming" });
-        } catch (err) {
-          console.warn(`Shift ${shift.id} status update failed`);
-        }
-      }
 
       const guard = shift.guards[0];
 
@@ -466,13 +593,13 @@ export const getMyUpcomingSchedules = async (req, res, next) => {
         description: shift.description,
         startTime: shift.startTime,
         endTime: shift.endTime,
-        status: "upcoming",
+        status: shift.status, // always "upcoming"
         createdAt: shift.createdAt,
         guard: {
           id: guard.id,
           name: guard.name,
           email: guard.email,
-          assignmentStatus: guard.StaticGuards?.status || "pending",
+          assignmentStatus: guard.StaticGuards?.status || "accepted",
           assignedAt: guard.StaticGuards?.createdAt || null,
         },
       });
@@ -492,11 +619,13 @@ export const getMyUpcomingSchedules = async (req, res, next) => {
   } catch (error) {
     console.error("GET MY UPCOMING SCHEDULES ERROR:", error.stack || error);
     return res.status(500).json({
-      status: "error",
-      message: error.message,
+      success: false,
+      message: "Internal server error",
+      error: error.message,
     });
   }
 };
+
 
 export const getMyNewShiftRequests = async (req, res, next) => {
   try {
