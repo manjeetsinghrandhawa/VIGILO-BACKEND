@@ -324,8 +324,7 @@ export const getMyAllShifts = async (req, res, next) => {
 
       // Dynamic status for UI only
       let dynamicStatus = shift.status;
-      if (now.isBetween(startLocal, endLocal)) dynamicStatus = "ongoing";
-      if (now.isSameOrAfter(endLocal)) dynamicStatus = "completed";
+
 
       const guard = shift.guards[0];
 
