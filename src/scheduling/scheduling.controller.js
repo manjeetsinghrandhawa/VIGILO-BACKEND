@@ -1282,6 +1282,242 @@ export const getMyTodayShiftCard = async (req, res) => {
   }
 };
 
+export const startOvertime = async (req, res) => {
+  try {
+    const { staticId, guardId } = req.body;
+
+    if (!staticId || !guardId) {
+      return res.status(400).json({
+        success: false,
+        message: "staticId and guardId are required",
+      });
+    }
+
+    const assignment = await StaticGuards.findOne({
+      where: { staticId, guardId },
+      include: [{ model: Static, as: "static" }],
+    });
+
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        message: "Shift assignment not found",
+      });
+    }
+
+    const shift = assignment.static;
+
+    if (!shift) {
+      return res.status(404).json({
+        success: false,
+        message: "Shift not found",
+      });
+    }
+
+    // 🚫 Must be clocked out
+    if (!assignment.clockOutTime) {
+      return res.status(400).json({
+        success: false,
+        message: "You must clock out before starting overtime",
+      });
+    }
+
+    // 🚫 Shift must be completed
+    if (assignment.status !== "completed" || shift.status !== "completed") {
+      return res.status(400).json({
+        success: false,
+        message: "Overtime can be started only after shift completion",
+      });
+    }
+
+    const now = new Date();
+    const clockOutTime = new Date(assignment.clockOutTime);
+
+    // ⏱️ 30-minute window after clock-out
+    const overtimeDeadline = new Date(
+      clockOutTime.getTime() + 30 * 60 * 1000
+    );
+
+    if (now > overtimeDeadline) {
+      return res.status(400).json({
+        success: false,
+        message: "Overtime window expired (30 minutes exceeded)",
+      });
+    }
+
+    // 🚫 Already started
+    if (assignment.status === "overtime_started") {
+      return res.status(400).json({
+        success: false,
+        message: "Overtime already started",
+      });
+    }
+
+    // ✅ START OVERTIME
+    assignment.status = "overtime_started";
+    assignment.overtimeStartTime = now;
+    await assignment.save();
+
+    await shift.update({ status: "overtime_started" });
+
+    return res.status(200).json({
+      success: true,
+      message: "Overtime started successfully",
+      data: {
+        shiftId: staticId,
+        guardId,
+        overtimeStartTime: formatTime(now),
+        allowedTill: formatTime(overtimeDeadline),
+      },
+    });
+  } catch (error) {
+    console.error("START OVERTIME ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+export const endOvertime = async (req, res) => {
+  try {
+    const { staticId, guardId } = req.body;
+
+    if (!staticId || !guardId) {
+      return res.status(400).json({
+        success: false,
+        message: "staticId and guardId are required",
+      });
+    }
+
+    const assignment = await StaticGuards.findOne({
+      where: { staticId, guardId },
+      include: [
+        {
+          model: Static,
+          as: "static",
+          include: [
+            {
+              model: Order,
+              as: "order",
+              attributes: ["locationName", "locationAddress"],
+            },
+          ],
+        },
+        {
+          model: User,
+          as: "guard",
+          attributes: ["id", "name", "email"],
+        },
+      ],
+    });
+
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        message: "Shift assignment not found",
+      });
+    }
+
+    const shift = assignment.static;
+
+    if (!shift) {
+      return res.status(404).json({
+        success: false,
+        message: "Shift not found",
+      });
+    }
+
+    // 🚫 Must be in overtime
+    if (assignment.status !== "overtime_started") {
+      return res.status(400).json({
+        success: false,
+        message: "Overtime is not active for this shift",
+      });
+    }
+
+    if (!assignment.overtimeStartTime) {
+      return res.status(400).json({
+        success: false,
+        message: "Overtime start time missing",
+      });
+    }
+
+    const now = new Date();
+    const clockIn = new Date(assignment.clockInTime);
+    const clockOut = new Date(assignment.clockOutTime);
+    const overtimeStart = new Date(assignment.overtimeStartTime);
+
+    // ⏱️ Calculations
+    const shiftMs = clockOut - clockIn;
+    const overtimeMs = now - overtimeStart;
+    const totalMs = shiftMs + overtimeMs;
+
+    const shiftDurationHours = Number(
+      (shiftMs / (1000 * 60 * 60)).toFixed(2)
+    );
+    const overtimeDurationHours = Number(
+      (overtimeMs / (1000 * 60 * 60)).toFixed(2)
+    );
+    const totalWorkedHours = Number(
+      (totalMs / (1000 * 60 * 60)).toFixed(2)
+    );
+
+    // ✅ SAVE OVERTIME END
+    assignment.overtimeEndTime = now;
+    assignment.overtimeHours = overtimeDurationHours;
+    assignment.totalHours = totalWorkedHours;
+    assignment.status = "overtime_ended";
+    await assignment.save();
+
+    await shift.update({ status: "overtime_ended" });
+
+    return res.status(200).json({
+      success: true,
+      message: "Overtime ended successfully",
+      data: {
+        shift: {
+          id: shift.id,
+          orderId: shift.orderId,
+          type: shift.type,
+          description: shift.description,
+          startTime: shift.startTime,
+          endTime: shift.endTime,
+          status: shift.status,
+          location: {
+            name: shift.order?.locationName || null,
+            address: shift.order?.locationAddress || null,
+          },
+        },
+        guard: {
+          id: assignment.guard?.id || guardId,
+          name: assignment.guard?.name || null,
+          email: assignment.guard?.email || null,
+        },
+        timing: {
+          clockInTime: clockIn,
+          clockOutTime: clockOut,
+          overtimeStartTime: overtimeStart,
+          overtimeEndTime: now,
+        },
+        duration: {
+          shiftHours: shiftDurationHours,
+          overtimeHours: overtimeDurationHours,
+          totalWorkedHours,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("END OVERTIME ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
 
 
 

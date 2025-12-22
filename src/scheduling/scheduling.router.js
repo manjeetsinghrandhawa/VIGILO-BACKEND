@@ -9,7 +9,9 @@ import {
   deleteSchedule,
   clockIn,
   clockOut,
-  getMyTodayShiftCard
+  getMyTodayShiftCard,
+  startOvertime,
+  endOvertime
   
 } from "./scheduling.controller.js";
 import { auth, isGaurd, isAdmin } from "../../middlewares/auth.js";
@@ -41,6 +43,10 @@ router.post("/clockIn",auth,isGaurd,clockIn );
 router.post("/clockOut",auth,isGaurd,clockOut );
 
 router.get("/getMyTodayShiftCard",auth,isGaurd, getMyTodayShiftCard);
+
+router.post("/startOvertime",auth,isGaurd, startOvertime );
+
+router.post("/endOvertime",auth,isGaurd, endOvertime);
 
 
 
