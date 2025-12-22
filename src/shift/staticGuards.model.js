@@ -30,7 +30,7 @@ const StaticGuards = sequelize.define(
       onDelete: "CASCADE",
     },
     status: {
-      type: DataTypes.ENUM("pending", "accepted", "rejected","ongoing", "completed", "overtime","ended_early","missed","overtime_started","overtime_ended","missed_respond"),
+      type: DataTypes.ENUM("absent", "pending", "accepted", "rejected","ongoing", "completed", "overtime","ended_early","missed","overtime_started","overtime_ended","missed_respond"),
       allowNull: false,
       defaultValue: "pending",
     },

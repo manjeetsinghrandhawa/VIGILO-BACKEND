@@ -318,17 +318,41 @@ export const getMyAllShifts = async (req, res, next) => {
       offset,
     });
 
-    const response = shifts.map((shift) => {
-      const startLocal = moment(shift.startTime).tz(tz);
-      const endLocal = moment(shift.endTime).tz(tz);
+    const response = [];
 
-      // Dynamic status for UI only
-      let dynamicStatus = shift.status;
-
-
+    for (const shift of shifts) {
       const guard = shift.guards[0];
+      const assignmentStatus = guard.StaticGuards?.status;
 
-      return {
+      let finalStatus = shift.status;
+
+      /**
+       * ❌ Only auto-update:
+       * pending → missed_respond
+       */
+      if (
+        shift.status === "pending" &&
+        assignmentStatus === "pending"
+      ) {
+        const endLocal = moment(shift.endTime).tz(tz);
+
+        if (now.isAfter(endLocal)) {
+          finalStatus = "missed_respond";
+
+          // 🔥 Persist once
+          if (finalStatus !== shift.status) {
+            try {
+              await shift.update({ status: finalStatus });
+            } catch (err) {
+              console.warn(
+                `Shift ${shift.id} missed_respond update failed`
+              );
+            }
+          }
+        }
+      }
+
+      response.push({
         id: shift.id,
         orderId: shift.orderId,
         orderLocationName: shift.order?.locationName || null,
@@ -338,17 +362,17 @@ export const getMyAllShifts = async (req, res, next) => {
         description: shift.description,
         startTime: shift.startTime,
         endTime: shift.endTime,
-        status: dynamicStatus,
+        status: finalStatus,
         createdAt: shift.createdAt,
         guard: {
           id: guard.id,
           name: guard.name,
           email: guard.email,
-          assignmentStatus: guard.StaticGuards?.status,
+          assignmentStatus,
           assignedAt: guard.StaticGuards?.createdAt,
         },
-      };
-    });
+      });
+    }
 
     return res.status(StatusCodes.OK).json({
       success: true,
@@ -449,7 +473,7 @@ export const getMySchedules = async (req, res, next) => {
       const startLocal = moment(shift.startTime).tz(tz);
       const endLocal = moment(shift.endTime).tz(tz);
 
-      let dynamicStatus = shift.status;
+      let finalStatus = shift.status;
 
 // 🔒 DO NOT override manual terminal states
       const lockedStatuses = ["ended_early", "missed_respond"];
@@ -503,7 +527,7 @@ export const getMySchedules = async (req, res, next) => {
         description: shift.description,
         startTime: shift.startTime,
         endTime: shift.endTime,
-        status: dynamicStatus,
+        status: finalStatus,
         createdAt: shift.createdAt,
         guard: {
           id: guard.id,
@@ -1065,58 +1089,53 @@ export const clockOut = async (req, res, next) => {
     const shiftEnd = new Date(shift.endTime);
     const clockIn = new Date(assignment.clockInTime);
 
-    let clockOut = now;
+    const oneHourAfterEnd = new Date(shiftEnd.getTime() + 60 * 60 * 1000);
+    const thirtyMinAfterEnd = new Date(shiftEnd.getTime() + 30 * 60 * 1000);
+
     let warnings = [];
     let assignmentStatus = "completed";
     let shiftStatus = "completed";
 
-    // 1️⃣ AUTO CLOCK-OUT IF NEXT SHIFT STARTS IMMEDIATELY
-    const nextShift = await StaticGuards.findOne({
-      where: { guardId },
-      include: [{ model: Static, as: "static" }],
-      order: [[{ model: Static, as: "static" }, "startTime", "ASC"]],
-    });
+    // 🚫 Too late → ABSENT
+    if (now > oneHourAfterEnd) {
+      assignment.status = "absent";
+      assignment.clockOutTime = null;
+      await assignment.save();
 
-    if (nextShift) {
-      const nextStart = new Date(nextShift.static.startTime);
-      if (nextStart.getTime() === shiftEnd.getTime()) {
-        const autoClockOut = new Date(shiftEnd.getTime() - 60 * 1000);
-        if (now > autoClockOut) {
-          clockOut = autoClockOut;
-          warnings.push(
-            `Auto clock-out applied at ${formatTime(autoClockOut)} due to next shift.`
-          );
-        }
-      }
+      await shift.update({ status: "absent" });
+
+      return res.status(400).json({
+        success: false,
+        message: "Shift marked as absent due to late clock-out",
+        data: {
+          shiftEndTime: formatTime(shiftEnd),
+          allowedTill: formatTime(oneHourAfterEnd),
+        },
+      });
     }
 
-    // 2️⃣ EARLY CLOCK-OUT
-    if (clockOut < shiftEnd) {
+    // ⚠️ Early clock-out
+    if (now < shiftEnd) {
       assignmentStatus = "ended_early";
       shiftStatus = "ended_early";
       warnings.push("Shift ended early.");
     }
 
-    // 3️⃣ TOTAL HOURS
-    const totalMs = clockOut - clockIn;
-    const totalHours = Number((totalMs / (1000 * 60 * 60)).toFixed(2));
-
-    // 4️⃣ OVERTIME
-    let overtimeHours = 0;
-    if (clockOut > shiftEnd) {
-      const overtimeMs = clockOut - shiftEnd;
-      overtimeHours = Number((overtimeMs / (1000 * 60 * 60)).toFixed(2));
-      assignmentStatus = "overtime";
-      shiftStatus = "completed";
+    // ⚠️ Late but acceptable (after 30 mins)
+    if (now > thirtyMinAfterEnd) {
+      warnings.push("Late_clock-out");
     }
 
-    // 5️⃣ SAVE ASSIGNMENT
-    assignment.clockOutTime = clockOut;
+    // ⏱ TOTAL HOURS (shift only)
+    const totalMs = now - clockIn;
+    const totalHours = Number((totalMs / (1000 * 60 * 60)).toFixed(2));
+
+    // ✅ SAVE
+    assignment.clockOutTime = now;
     assignment.totalHours = totalHours;
     assignment.status = assignmentStatus;
     await assignment.save();
 
-    // 6️⃣ SAVE SHIFT STATUS
     await shift.update({ status: shiftStatus });
 
     return res.status(200).json({
@@ -1126,11 +1145,10 @@ export const clockOut = async (req, res, next) => {
       data: {
         shiftDate: formatDate(shiftStart),
         clockInTime: formatTime(clockIn),
-        clockOutTime: formatTime(clockOut),
+        clockOutTime: formatTime(now),
         shiftStartTime: formatTime(shiftStart),
         shiftEndTime: formatTime(shiftEnd),
         totalHours,
-        overtimeHours,
         assignmentStatus,
         shiftStatus,
       },
@@ -1144,6 +1162,7 @@ export const clockOut = async (req, res, next) => {
     });
   }
 };
+
 
 export const getMyTodayShiftCard = async (req, res) => {
   try {

@@ -26,7 +26,7 @@ const Static = sequelize.define(
       defaultValue: "static",
     },
     status: {
-      type: DataTypes.ENUM("pending", "upcoming", "ongoing", "completed","cancelled","ended_early","missed","overtime_started","overtime_ended","missed_respond"),
+      type: DataTypes.ENUM("absent", "pending", "upcoming", "ongoing", "completed","cancelled","ended_early","missed","overtime_started","overtime_ended","missed_respond"),
       allowNull: false,
       defaultValue: "pending",
     },
