@@ -8,7 +8,8 @@ import {
   getMyNewShiftRequests,
   deleteSchedule,
   clockIn,
-  clockOut
+  clockOut,
+  getMyTodayShiftCard
   
 } from "./scheduling.controller.js";
 import { auth, isGaurd, isAdmin } from "../../middlewares/auth.js";
@@ -38,6 +39,8 @@ router.post("/clockIn",auth,isGaurd,clockIn );
 
 //clock out a shift by guard
 router.post("/clockOut",auth,isGaurd,clockOut );
+
+router.get("/getMyTodayShiftCard",auth,isGaurd, getMyTodayShiftCard);
 
 
 

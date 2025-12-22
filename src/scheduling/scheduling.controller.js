@@ -452,21 +452,43 @@ export const getMySchedules = async (req, res, next) => {
       let dynamicStatus = shift.status;
 
 // 🔒 DO NOT override manual terminal states
-const lockedStatuses = ["ended_early"];
+      const lockedStatuses = ["ended_early", "missed_respond"];
 
-if (!lockedStatuses.includes(shift.status)) {
-  if (now.isBefore(startLocal)) dynamicStatus = "upcoming";
-  else if (now.isBetween(startLocal, endLocal)) dynamicStatus = "ongoing";
-  else if (now.isSameOrAfter(endLocal)) dynamicStatus = "completed";
+      if (!lockedStatuses.includes(shift.status)) {
 
-  if (shift.status !== dynamicStatus) {
-    try {
-      await shift.update({ status: dynamicStatus });
-    } catch (err) {
-      console.warn(`Shift ${shift.id} status update failed`);
-    }
-  }
-}
+        // ❌ Guard never responded to shift request
+        if (
+          shift.status === "pending" &&
+          assignment?.status === "pending" &&
+          now.isAfter(endLocal)
+        ) {
+          finalStatus = "missed_respond";
+        }
+
+        // ⏳ UPCOMING
+        else if (now.isBefore(startLocal)) {
+          finalStatus = "upcoming";
+        }
+
+        // ▶️ ONGOING
+        else if (now.isBetween(startLocal, endLocal)) {
+          finalStatus = "ongoing";
+        }
+
+        // ✅ COMPLETED
+        else if (now.isSameOrAfter(endLocal)) {
+          finalStatus = "completed";
+        }
+
+        // 🔥 Update DB only here
+        if (finalStatus !== shift.status) {
+          try {
+            await shift.update({ status: finalStatus });
+          } catch (err) {
+            console.warn(`Shift ${shift.id} status update failed`);
+          }
+        }
+      }
 
 
       const guard = shift.guards[0]; // only one guard here
@@ -824,17 +846,74 @@ export const clockIn = async (req, res, next) => {
     const shiftAlias = isStatic ? "static" : "patrol";
 
     // 🚫 Guard already in an active shift
-    const activeShift = await ShiftGuardModel.findOne({
-      where: { guardId, status: "ongoing" },
-    });
+const activeShift = await ShiftGuardModel.findOne({
+  where: { guardId, status: "ongoing" },
+  include: [
+    {
+      model: ShiftModel,
+      as: shiftAlias,
+      attributes: [
+        "id",
+        "orderId",
+        "type",
+        "description",
+        "startTime",
+        "endTime",
+        "status",
+        "createdAt",
+      ],
+      include: [
+        {
+          model: Order,
+          as: "order",
+          attributes: ["locationName", "locationAddress"],
+        },
+      ],
+    },
+  ],
+});
 
-    if (activeShift) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "You must clock out from the previous shift before starting a new one.",
-      });
-    }
+if (activeShift) {
+  const shift = activeShift[shiftAlias];
+  const shiftStart = new Date(shift.startTime);
+  const shiftEnd = new Date(shift.endTime);
+
+  return res.status(400).json({
+    success: false,
+    message:
+      "You must clock out from the previous shift before starting a new one.",
+    activeShift: {
+      assignmentId: activeShift.id,
+      shiftId: shift.id,
+      shiftType: type,
+      orderId: shift.orderId,
+
+      // 📍 Location details
+      locationName: shift.order?.locationName || null,
+      locationAddress: shift.order?.locationAddress || null,
+
+      // 🕒 Shift timing
+      shiftDate: formatDate(shiftStart),
+      startTime: formatTime(shiftStart),
+      endTime: formatTime(shiftEnd),
+      duration: getShiftDuration(shiftStart, shiftEnd),
+
+      // 📌 Status info
+      shiftStatus: shift.status,
+      assignmentStatus: activeShift.status,
+
+      // ⏱️ Clock-in info
+      clockInTime: activeShift.clockInTime
+        ? formatTime(activeShift.clockInTime)
+        : null,
+
+      // 📝 Extra context
+      description: shift.description,
+      createdAt: shift.createdAt,
+    },
+  });
+}
+
 
     // Fetch assignment
     const assignment = await ShiftGuardModel.findOne({
@@ -1065,6 +1144,144 @@ export const clockOut = async (req, res, next) => {
     });
   }
 };
+
+export const getMyTodayShiftCard = async (req, res) => {
+  try {
+    const guardId = req.user?.id;
+
+    if (!guardId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized access",
+      });
+    }
+
+    const tz = getTimeZone();
+    const now = moment().tz(tz);
+
+    /**
+     * 1️⃣ First: check ONGOING shift
+     */
+    let shift = await Static.findOne({
+      where: {
+        status: "ongoing",
+      },
+      include: [
+        {
+          model: User,
+          as: "guards",
+          where: { id: guardId },
+          through: {
+            where: { status: "ongoing" },
+            attributes: ["clockInTime"],
+          },
+          required: true,
+        },
+        {
+          model: Order,
+          as: "order",
+          attributes: ["locationName", "locationAddress"],
+        },
+      ],
+      order: [["startTime", "ASC"]],
+    });
+
+    /**
+     * 2️⃣ If no ongoing → get nearest UPCOMING
+     */
+    if (!shift) {
+      shift = await Static.findOne({
+        where: {
+          status: "upcoming",
+          startTime: { [Op.gte]: now.toDate() },
+        },
+        include: [
+          {
+            model: User,
+            as: "guards",
+            where: { id: guardId },
+            through: {
+              where: { status: "accepted" },
+              attributes: ["createdAt"],
+            },
+            required: true,
+          },
+          {
+            model: Order,
+            as: "order",
+            attributes: ["locationName", "locationAddress"],
+          },
+        ],
+        order: [["startTime", "ASC"]], // nearest upcoming
+      });
+    }
+
+    /**
+     * 3️⃣ No shift at all
+     */
+    if (!shift) {
+      return res.status(200).json({
+        success: true,
+        message: "No ongoing or upcoming shifts",
+        data: null,
+      });
+    }
+
+    /**
+     * 4️⃣ Build Card Response
+     */
+    const guard = shift.guards[0];
+    const startLocal = moment(shift.startTime).tz(tz);
+    const endLocal = moment(shift.endTime).tz(tz);
+
+    let clockInAvailableFrom = moment(startLocal)
+      .subtract(1, "hour")
+      .format("hh:mm A");
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        shiftId: shift.id,
+        date: startLocal.format("YYYY-MM-DD"),
+        status: shift.status.toUpperCase(), // UPCOMING / ONGOING
+
+        order: {
+          locationName: shift.order?.locationName || null,
+          locationAddress: shift.order?.locationAddress || null,
+        },
+
+        timing: {
+          startTime: startLocal.format("hh:mm A"),
+          endTime: endLocal.format("hh:mm A"),
+        },
+
+        totalLoginHours: guard.StaticGuards?.clockInTime
+          ? moment
+              .duration(now.diff(moment(guard.StaticGuards.clockInTime)))
+              .asHours()
+              .toFixed(2)
+          : "00.00",
+
+        clockInInfo:
+          shift.status === "upcoming"
+            ? {
+                enabled: now.isSameOrAfter(
+                  moment(startLocal).subtract(1, "hour")
+                ),
+                message: `Clock-in will be available from ${clockInAvailableFrom}.`,
+              }
+            : null,
+      },
+    });
+  } catch (error) {
+    console.error("TODAY SHIFT CARD ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
 
 
 
