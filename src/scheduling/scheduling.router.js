@@ -3,7 +3,7 @@ import {
   createSchedule,
   getAllSchedules,
   getMyAllShifts,
-  getMySchedules,
+  // getMySchedules,
   getMyUpcomingSchedules,
   getMyNewShiftRequests,
   deleteSchedule,
@@ -27,7 +27,7 @@ router.get("/getAllSchedules",auth,isAdmin, getAllSchedules);
 
 router.post("/getMyAllShifts",auth,isGaurd, getMyAllShifts);
 
-router.get("/getMySchedules",auth,isGaurd, getMySchedules);
+// router.get("/getMySchedules",auth,isGaurd, getMySchedules);
 
 router.get("/getMyUpcomingSchedules",auth, isGaurd, getMyUpcomingSchedules);
 

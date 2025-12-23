@@ -131,7 +131,7 @@ export const getAllSchedules = async (req, res, next) => {
     const tz = getTimeZone();
     const now = moment().tz(tz);
 
-    const allowedStatuses = ["pending", "upcoming", "ongoing", "completed", "cancelled"];
+    const allowedStatuses = ["absent","pending", "upcoming", "ongoing", "completed", "cancelled"];
 
     const { count, rows: shifts } = await Static.findAndCountAll({
       attributes: [
@@ -183,12 +183,12 @@ export const getAllSchedules = async (req, res, next) => {
       const startLocal = moment(shift.startTime).tz(tz);
       const endLocal = moment(shift.endTime).tz(tz);
 
-      let computedStatus = shift.status;
+      // let computedStatus = shift.status;
 
-      if (shift.status === "upcoming") {
-        if (now.isBetween(startLocal, endLocal)) computedStatus = "ongoing";
-        else if (now.isSameOrAfter(endLocal)) computedStatus = "completed";
-      }
+      // if (shift.status === "upcoming") {
+      //   if (now.isBetween(startLocal, endLocal)) computedStatus = "ongoing";
+      //   else if (now.isSameOrAfter(endLocal)) computedStatus = "completed";
+      // }
 
       return {
         id: shift.id,
@@ -201,7 +201,7 @@ export const getAllSchedules = async (req, res, next) => {
         startTime: shift.startTime,
         endTime: shift.endTime,
         status: shift.status,          // 🔒 DB status (unchanged)
-        displayStatus: computedStatus, // 👀 UI-only
+        // displayStatus: computedStatus, // 👀 UI-only
         createdAt: shift.createdAt,
         guards: Array.isArray(shift.guards)
           ? shift.guards.map((g) => ({
@@ -218,7 +218,7 @@ export const getAllSchedules = async (req, res, next) => {
     // Optional filter
     const filteredShifts =
       status && allowedStatuses.includes(status)
-        ? formattedShifts.filter((s) => s.displayStatus === status)
+        ? formattedShifts.filter((s) => s.status === status)
         : formattedShifts;
 
     return res.status(StatusCodes.OK).json({
@@ -397,172 +397,172 @@ export const getMyAllShifts = async (req, res, next) => {
 };
 
 
-export const getMySchedules = async (req, res, next) => {
-  try {
-    const guardId = req.user?.id;
+// export const getMySchedules = async (req, res, next) => {
+//   try {
+//     const guardId = req.user?.id;
 
-    if (!guardId) {
-      return next(
-        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
-      );
-    }
+//     if (!guardId) {
+//       return next(
+//         new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+//       );
+//     }
 
-    let { page = 1, limit = 20, status } = req.query;
+//     let { page = 1, limit = 20, status } = req.query;
 
-    page = parseInt(page);
-    limit = parseInt(limit);
-    if (isNaN(page) || page < 1) page = 1;
-    if (isNaN(limit) || limit < 1) limit = 20;
+//     page = parseInt(page);
+//     limit = parseInt(limit);
+//     if (isNaN(page) || page < 1) page = 1;
+//     if (isNaN(limit) || limit < 1) limit = 20;
 
-    const offset = (page - 1) * limit;
+//     const offset = (page - 1) * limit;
 
-    const tz = getTimeZone();
-    const now = moment().tz(tz);
-    const allowedStatuses = ["upcoming", "ongoing", "completed"];
+//     const tz = getTimeZone();
+//     const now = moment().tz(tz);
+//     const allowedStatuses = ["upcoming", "ongoing", "completed"];
 
-    const { count, rows: shifts } = await Static.findAndCountAll({
-      attributes: [
-        "id",
-        "orderId",
-        "type",
-        "description",
-        "startTime",
-        "endTime",
-        "status",
-        "createdAt",
-      ],
-      include: [
-        {
-          model: Order,
-          as: "order",
-          attributes: ["locationName", "locationAddress"],
-        },
-        {
-          model: User,
-          as: "guards",
-          where: { id: guardId }, // 🔥 FILTER BY LOGGED-IN GUARD
-          attributes: ["id", "name", "email"],
-          through: {
-            attributes: ["status", "createdAt"],
-          },
-          required: true, // 🔥 IMPORTANT
-        },
-      ],
-      order: [["startTime", "ASC"]],
-      limit,
-      offset,
-    });
+//     const { count, rows: shifts } = await Static.findAndCountAll({
+//       attributes: [
+//         "id",
+//         "orderId",
+//         "type",
+//         "description",
+//         "startTime",
+//         "endTime",
+//         "status",
+//         "createdAt",
+//       ],
+//       include: [
+//         {
+//           model: Order,
+//           as: "order",
+//           attributes: ["locationName", "locationAddress"],
+//         },
+//         {
+//           model: User,
+//           as: "guards",
+//           where: { id: guardId }, // 🔥 FILTER BY LOGGED-IN GUARD
+//           attributes: ["id", "name", "email"],
+//           through: {
+//             attributes: ["status", "createdAt"],
+//           },
+//           required: true, // 🔥 IMPORTANT
+//         },
+//       ],
+//       order: [["startTime", "ASC"]],
+//       limit,
+//       offset,
+//     });
 
-    if (!shifts.length) {
-      return res.status(StatusCodes.OK).json({
-        success: true,
-        message: "No shifts found",
-        data: [],
-        pagination: {
-          total: 0,
-          page,
-          totalPages: 0,
-          limit,
-        },
-      });
-    }
+//     if (!shifts.length) {
+//       return res.status(StatusCodes.OK).json({
+//         success: true,
+//         message: "No shifts found",
+//         data: [],
+//         pagination: {
+//           total: 0,
+//           page,
+//           totalPages: 0,
+//           limit,
+//         },
+//       });
+//     }
 
-    const formattedShifts = [];
+//     const formattedShifts = [];
 
-    for (const shift of shifts) {
-      const startLocal = moment(shift.startTime).tz(tz);
-      const endLocal = moment(shift.endTime).tz(tz);
+//     for (const shift of shifts) {
+//       const startLocal = moment(shift.startTime).tz(tz);
+//       const endLocal = moment(shift.endTime).tz(tz);
 
-      let finalStatus = shift.status;
+//       let finalStatus = shift.status;
 
-// 🔒 DO NOT override manual terminal states
-      const lockedStatuses = ["ended_early", "missed_respond"];
+// // 🔒 DO NOT override manual terminal states
+//       const lockedStatuses = ["ended_early", "missed_respond"];
 
-      if (!lockedStatuses.includes(shift.status)) {
+//       if (!lockedStatuses.includes(shift.status)) {
 
-        // ❌ Guard never responded to shift request
-        if (
-          shift.status === "pending" &&
-          assignment?.status === "pending" &&
-          now.isAfter(endLocal)
-        ) {
-          finalStatus = "missed_respond";
-        }
+//         // ❌ Guard never responded to shift request
+//         if (
+//           shift.status === "pending" &&
+//           assignment?.status === "pending" &&
+//           now.isAfter(endLocal)
+//         ) {
+//           finalStatus = "missed_respond";
+//         }
 
-        // ⏳ UPCOMING
-        else if (now.isBefore(startLocal)) {
-          finalStatus = "upcoming";
-        }
+//         // ⏳ UPCOMING
+//         else if (now.isBefore(startLocal)) {
+//           finalStatus = "upcoming";
+//         }
 
-        // ▶️ ONGOING
-        else if (now.isBetween(startLocal, endLocal)) {
-          finalStatus = "ongoing";
-        }
+//         // ▶️ ONGOING
+//         else if (now.isBetween(startLocal, endLocal)) {
+//           finalStatus = "ongoing";
+//         }
 
-        // ✅ COMPLETED
-        else if (now.isSameOrAfter(endLocal)) {
-          finalStatus = "completed";
-        }
+//         // ✅ COMPLETED
+//         else if (now.isSameOrAfter(endLocal)) {
+//           finalStatus = "completed";
+//         }
 
-        // 🔥 Update DB only here
-        if (finalStatus !== shift.status) {
-          try {
-            await shift.update({ status: finalStatus });
-          } catch (err) {
-            console.warn(`Shift ${shift.id} status update failed`);
-          }
-        }
-      }
+//         // 🔥 Update DB only here
+//         if (finalStatus !== shift.status) {
+//           try {
+//             await shift.update({ status: finalStatus });
+//           } catch (err) {
+//             console.warn(`Shift ${shift.id} status update failed`);
+//           }
+//         }
+//       }
 
 
-      const guard = shift.guards[0]; // only one guard here
+//       const guard = shift.guards[0]; // only one guard here
 
-      formattedShifts.push({
-        id: shift.id,
-        orderId: shift.orderId,
-        orderLocationName: shift.order?.locationName || null,
-        orderLocationAddress: shift.order?.locationAddress || null,
-        date: moment.utc(shift.startTime).format("YYYY-MM-DD"),
-        type: shift.type,
-        description: shift.description,
-        startTime: shift.startTime,
-        endTime: shift.endTime,
-        status: finalStatus,
-        createdAt: shift.createdAt,
-        guard: {
-          id: guard.id,
-          name: guard.name,
-          email: guard.email,
-          assignmentStatus: guard.StaticGuards?.status || "pending",
-          assignedAt: guard.StaticGuards?.createdAt || null,
-        },
-      });
-    }
+//       formattedShifts.push({
+//         id: shift.id,
+//         orderId: shift.orderId,
+//         orderLocationName: shift.order?.locationName || null,
+//         orderLocationAddress: shift.order?.locationAddress || null,
+//         date: moment.utc(shift.startTime).format("YYYY-MM-DD"),
+//         type: shift.type,
+//         description: shift.description,
+//         startTime: shift.startTime,
+//         endTime: shift.endTime,
+//         status: finalStatus,
+//         createdAt: shift.createdAt,
+//         guard: {
+//           id: guard.id,
+//           name: guard.name,
+//           email: guard.email,
+//           assignmentStatus: guard.StaticGuards?.status || "pending",
+//           assignedAt: guard.StaticGuards?.createdAt || null,
+//         },
+//       });
+//     }
 
-    const filteredShifts =
-      status && allowedStatuses.includes(status)
-        ? formattedShifts.filter((s) => s.status === status)
-        : formattedShifts;
+//     const filteredShifts =
+//       status && allowedStatuses.includes(status)
+//         ? formattedShifts.filter((s) => s.status === status)
+//         : formattedShifts;
 
-    return res.status(StatusCodes.OK).json({
-      success: true,
-      message: "My shifts fetched successfully",
-      data: filteredShifts,
-      pagination: {
-        total: count,
-        page,
-        totalPages: Math.ceil(count / limit),
-        limit,
-      },
-    });
-  } catch (error) {
-    console.error("GET MY SCHEDULES ERROR:", error.stack || error);
-    return res.status(500).json({
-      status: "error",
-      message: error.message,
-    });
-  }
-};
+//     return res.status(StatusCodes.OK).json({
+//       success: true,
+//       message: "My shifts fetched successfully",
+//       data: filteredShifts,
+//       pagination: {
+//         total: count,
+//         page,
+//         totalPages: Math.ceil(count / limit),
+//         limit,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("GET MY SCHEDULES ERROR:", error.stack || error);
+//     return res.status(500).json({
+//       status: "error",
+//       message: error.message,
+//     });
+//   }
+// };
 
 export const getMyUpcomingSchedules = async (req, res, next) => {
   try {
@@ -1163,6 +1163,17 @@ export const clockOut = async (req, res, next) => {
   }
 };
 
+const getTotalLoginHours = (clockInTime, clockOutTime, now) => {
+  if (!clockInTime) return "00.00";
+
+  const end = clockOutTime ? moment(clockOutTime) : now;
+
+  return moment
+    .duration(end.diff(moment(clockInTime)))
+    .asHours()
+    .toFixed(2);
+};
+
 
 export const getMyTodayShiftCard = async (req, res) => {
   try {
@@ -1192,7 +1203,7 @@ export const getMyTodayShiftCard = async (req, res) => {
           where: { id: guardId },
           through: {
             where: { status: "ongoing" },
-            attributes: ["clockInTime"],
+            attributes: ["clockInTime","clockOutTime"],
           },
           required: true,
         },
@@ -1221,7 +1232,7 @@ export const getMyTodayShiftCard = async (req, res) => {
             where: { id: guardId },
             through: {
               where: { status: "accepted" },
-              attributes: ["createdAt"],
+              attributes: ["createdAt", "clockInTime", "clockOutTime"],
             },
             required: true,
           },
@@ -1249,9 +1260,20 @@ export const getMyTodayShiftCard = async (req, res) => {
     /**
      * 4️⃣ Build Card Response
      */
-    const guard = shift.guards[0];
+     const guard = shift.guards[0];
+    const pivot = guard.StaticGuards;
+
+    const clockInTime = pivot?.clockInTime || null;
+    const clockOutTime = pivot?.clockOutTime || null;
+
     const startLocal = moment(shift.startTime).tz(tz);
     const endLocal = moment(shift.endTime).tz(tz);
+
+    const totalLoginHours = getTotalLoginHours(
+      clockInTime,
+      clockOutTime,
+      now
+    );
 
     let clockInAvailableFrom = moment(startLocal)
       .subtract(1, "hour")
@@ -1262,7 +1284,8 @@ export const getMyTodayShiftCard = async (req, res) => {
       data: {
         shiftId: shift.id,
         date: startLocal.format("YYYY-MM-DD"),
-        status: shift.status.toUpperCase(), // UPCOMING / ONGOING
+        type: shift.type,
+        status: shift.status, // UPCOMING / ONGOING
 
         order: {
           locationName: shift.order?.locationName || null,
@@ -1270,16 +1293,23 @@ export const getMyTodayShiftCard = async (req, res) => {
         },
 
         timing: {
-          startTime: startLocal.format("hh:mm A"),
-          endTime: endLocal.format("hh:mm A"),
+        startTime: shift.startTime,
+        endTime: shift.endTime,
         },
 
-        totalLoginHours: guard.StaticGuards?.clockInTime
-          ? moment
-              .duration(now.diff(moment(guard.StaticGuards.clockInTime)))
-              .asHours()
-              .toFixed(2)
-          : "00.00",
+         attendance: {
+          clockInTime,
+          clockOutTime,
+          totalLoginHours,
+        },
+
+
+        // totalLoginHours: guard.StaticGuards?.clockInTime
+        //   ? moment
+        //       .duration(now.diff(moment(guard.StaticGuards.clockInTime)))
+        //       .asHours()
+        //       .toFixed(2)
+        //   : "00.00",
 
         clockInInfo:
           shift.status === "upcoming"

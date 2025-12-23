@@ -2,6 +2,8 @@ import cron from "node-cron";
 import moment from "moment-timezone";
 import { Op } from "sequelize";
 import Order from "../order/order.model.js";
+import Static from "../shift/static.model.js";
+import StaticGuards from "../shift/staticGuards.model.js";
 import { getTimeZone } from "../../utils/timeZone.js";
 
 const updateOrderStatuses = async () => {
@@ -69,5 +71,50 @@ cron.schedule(
     timezone: getTimeZone(),
   }
 );
+
+cron.schedule("*/10 * * * *", async () => {
+  try {
+    const tz = getTimeZone();
+    const now = moment().tz(tz);
+
+    const graceMinutes = 10;
+
+const shifts = await Static.findAll({
+  where: {
+    status: "upcoming",
+    startTime: {
+      [Op.lt]: moment(now)
+        .subtract(graceMinutes, "minutes")
+        .toDate(),
+    },
+  },
+  include: [
+    {
+      model: StaticGuards,
+      as: "StaticGuards",
+      where: { status: "accepted" },
+      required: true,
+    },
+  ],
+});
+
+
+    for (const shift of shifts) {
+      const guardAssignment = shift.StaticGuards;
+
+      if (!guardAssignment.clockInTime) {
+        await shift.update({ status: "absent" });
+
+        await guardAssignment.update({
+          status: "absent",
+        });
+
+        console.log(`Shift ${shift.id} marked as ABSENT`);
+      }
+    }
+  } catch (error) {
+    console.error("ABSENT CRON ERROR:", error);
+  }
+});
 
 export default updateOrderStatuses;
