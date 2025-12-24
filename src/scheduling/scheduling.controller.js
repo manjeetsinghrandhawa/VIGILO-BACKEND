@@ -1178,7 +1178,6 @@ const getTotalLoginHours = (clockInTime, clockOutTime, now) => {
 export const getMyTodayShiftCard = async (req, res) => {
   try {
     const guardId = req.user?.id;
-
     if (!guardId) {
       return res.status(401).json({
         success: false,
@@ -1188,9 +1187,10 @@ export const getMyTodayShiftCard = async (req, res) => {
 
     const tz = getTimeZone();
     const now = moment().tz(tz);
+    const graceMinutes = 10;
 
     /**
-     * 1️⃣ First: check ONGOING shift
+     * 1️⃣ ONGOING shift (highest priority)
      */
     let shift = await Static.findOne({
       where: {
@@ -1203,7 +1203,7 @@ export const getMyTodayShiftCard = async (req, res) => {
           where: { id: guardId },
           through: {
             where: { status: "ongoing" },
-            attributes: ["clockInTime","clockOutTime"],
+            attributes: ["clockInTime", "clockOutTime"],
           },
           required: true,
         },
@@ -1217,13 +1217,15 @@ export const getMyTodayShiftCard = async (req, res) => {
     });
 
     /**
-     * 2️⃣ If no ongoing → get nearest UPCOMING
+     * 2️⃣ NEXT UPCOMING shift (future OR within grace window)
      */
     if (!shift) {
       shift = await Static.findOne({
         where: {
           status: "upcoming",
-          startTime: { [Op.gte]: now.toDate() },
+          startTime: {
+            [Op.lte]: moment(now).add(graceMinutes, "minutes").toDate(),
+          },
         },
         include: [
           {
@@ -1232,7 +1234,7 @@ export const getMyTodayShiftCard = async (req, res) => {
             where: { id: guardId },
             through: {
               where: { status: "accepted" },
-              attributes: ["createdAt", "clockInTime", "clockOutTime"],
+              attributes: ["clockInTime", "clockOutTime"],
             },
             required: true,
           },
@@ -1242,12 +1244,12 @@ export const getMyTodayShiftCard = async (req, res) => {
             attributes: ["locationName", "locationAddress"],
           },
         ],
-        order: [["startTime", "ASC"]], // nearest upcoming
+        order: [["startTime", "ASC"]], // nearest shift
       });
     }
 
     /**
-     * 3️⃣ No shift at all
+     * 3️⃣ No shift
      */
     if (!shift) {
       return res.status(200).json({
@@ -1258,16 +1260,15 @@ export const getMyTodayShiftCard = async (req, res) => {
     }
 
     /**
-     * 4️⃣ Build Card Response
+     * 4️⃣ Build response
      */
-     const guard = shift.guards[0];
+    const guard = shift.guards[0];
     const pivot = guard.StaticGuards;
 
     const clockInTime = pivot?.clockInTime || null;
     const clockOutTime = pivot?.clockOutTime || null;
 
     const startLocal = moment(shift.startTime).tz(tz);
-    const endLocal = moment(shift.endTime).tz(tz);
 
     const totalLoginHours = getTotalLoginHours(
       clockInTime,
@@ -1275,17 +1276,13 @@ export const getMyTodayShiftCard = async (req, res) => {
       now
     );
 
-    let clockInAvailableFrom = moment(startLocal)
-      .subtract(1, "hour")
-      .format("hh:mm A");
-
     return res.status(200).json({
       success: true,
       data: {
         shiftId: shift.id,
         date: startLocal.format("YYYY-MM-DD"),
         type: shift.type,
-        status: shift.status, // UPCOMING / ONGOING
+        status: shift.status,
 
         order: {
           locationName: shift.order?.locationName || null,
@@ -1293,23 +1290,15 @@ export const getMyTodayShiftCard = async (req, res) => {
         },
 
         timing: {
-        startTime: shift.startTime,
-        endTime: shift.endTime,
+          startTime: shift.startTime,
+          endTime: shift.endTime,
         },
 
-         attendance: {
+        attendance: {
           clockInTime,
           clockOutTime,
           totalLoginHours,
         },
-
-
-        // totalLoginHours: guard.StaticGuards?.clockInTime
-        //   ? moment
-        //       .duration(now.diff(moment(guard.StaticGuards.clockInTime)))
-        //       .asHours()
-        //       .toFixed(2)
-        //   : "00.00",
 
         clockInInfo:
           shift.status === "upcoming"
@@ -1317,7 +1306,9 @@ export const getMyTodayShiftCard = async (req, res) => {
                 enabled: now.isSameOrAfter(
                   moment(startLocal).subtract(1, "hour")
                 ),
-                message: `Clock-in will be available from ${clockInAvailableFrom}.`,
+                message: `Clock-in available from ${moment(startLocal)
+                  .subtract(1, "hour")
+                  .format("hh:mm A")}`,
               }
             : null,
       },
@@ -1330,6 +1321,8 @@ export const getMyTodayShiftCard = async (req, res) => {
     });
   }
 };
+
+
 
 export const startOvertime = async (req, res) => {
   try {
@@ -1486,19 +1479,13 @@ export const endOvertime = async (req, res) => {
       });
     }
 
-    if (!assignment.overtimeStartTime) {
-      return res.status(400).json({
-        success: false,
-        message: "Overtime start time missing",
-      });
-    }
-
     const now = new Date();
     const clockIn = new Date(assignment.clockInTime);
     const clockOut = new Date(assignment.clockOutTime);
-    const overtimeStart = new Date(assignment.overtimeStartTime);
 
-    // ⏱️ Calculations
+    // ⏱️ TEMP: Overtime starts from clockOutTime
+    const overtimeStart = clockOut;
+
     const shiftMs = clockOut - clockIn;
     const overtimeMs = now - overtimeStart;
     const totalMs = shiftMs + overtimeMs;
@@ -1547,7 +1534,6 @@ export const endOvertime = async (req, res) => {
         timing: {
           clockInTime: clockIn,
           clockOutTime: clockOut,
-          overtimeStartTime: overtimeStart,
           overtimeEndTime: now,
         },
         duration: {
@@ -1566,6 +1552,7 @@ export const endOvertime = async (req, res) => {
     });
   }
 };
+
 
 
 

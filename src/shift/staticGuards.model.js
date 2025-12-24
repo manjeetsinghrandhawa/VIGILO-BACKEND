@@ -11,6 +11,7 @@ const StaticGuards = sequelize.define(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
+
     staticId: {
       type: DataTypes.UUID,
       allowNull: false,
@@ -20,6 +21,7 @@ const StaticGuards = sequelize.define(
       },
       onDelete: "CASCADE",
     },
+
     guardId: {
       type: DataTypes.UUID,
       allowNull: false,
@@ -29,24 +31,53 @@ const StaticGuards = sequelize.define(
       },
       onDelete: "CASCADE",
     },
+
     status: {
-      type: DataTypes.ENUM("absent", "pending", "accepted", "rejected","ongoing", "completed", "overtime","ended_early","missed","overtime_started","overtime_ended","missed_respond"),
+      type: DataTypes.ENUM(
+        "absent",
+        "pending",
+        "accepted",
+        "rejected",
+        "ongoing",
+        "completed",
+        "overtime",
+        "ended_early",
+        "missed",
+        "overtime_started",
+        "overtime_ended",
+        "missed_respond"
+      ),
       allowNull: false,
       defaultValue: "pending",
     },
-    clockInTime: {
-  type: DataTypes.DATE,
-  allowNull: true
-},
-clockOutTime: {
-  type: DataTypes.DATE,
-  allowNull: true
-},
-totalHours: {
-  type: DataTypes.FLOAT,
-  allowNull: true
-}
 
+    clockInTime: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+
+    clockOutTime: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+
+    /** 🔥 OVERTIME FIELDS (MISSING EARLIER) */
+
+
+    overtimeEndTime: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+
+    overtimeHours: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+    },
+
+    totalHours: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+    },
   },
   {
     timestamps: true,
@@ -54,13 +85,13 @@ totalHours: {
     indexes: [
       {
         unique: true,
-        fields: ["staticId", "guardId"], 
+        fields: ["staticId", "guardId"],
       },
     ],
   }
 );
 
-// Associations
+/* Associations */
 Static.belongsToMany(User, {
   through: StaticGuards,
   foreignKey: "staticId",
@@ -73,17 +104,14 @@ User.belongsToMany(Static, {
   as: "statics",
 });
 
-// StaticGuards → Static (one assignment belongs to one shift)
 StaticGuards.belongsTo(Static, {
   foreignKey: "staticId",
   as: "static",
 });
 
-// StaticGuards → User (one assignment belongs to one guard)
 StaticGuards.belongsTo(User, {
   foreignKey: "guardId",
   as: "guard",
 });
-
 
 export default StaticGuards;

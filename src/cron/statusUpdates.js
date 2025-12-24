@@ -4,6 +4,7 @@ import { Op } from "sequelize";
 import Order from "../order/order.model.js";
 import Static from "../shift/static.model.js";
 import StaticGuards from "../shift/staticGuards.model.js";
+import User from "../user/user.model.js";
 import { getTimeZone } from "../../utils/timeZone.js";
 
 const updateOrderStatuses = async () => {
@@ -76,45 +77,74 @@ cron.schedule("*/10 * * * *", async () => {
   try {
     const tz = getTimeZone();
     const now = moment().tz(tz);
-
     const graceMinutes = 10;
 
-const shifts = await Static.findAll({
-  where: {
-    status: "upcoming",
-    startTime: {
-      [Op.lt]: moment(now)
-        .subtract(graceMinutes, "minutes")
-        .toDate(),
-    },
-  },
-  include: [
-    {
-      model: StaticGuards,
-      as: "StaticGuards",
-      where: { status: "accepted" },
-      required: true,
-    },
-  ],
-});
-
+    const shifts = await Static.findAll({
+      where: {
+        status: {
+          [Op.in]: ["upcoming", "ongoing"],
+        },
+      },
+      include: [
+        {
+          model: User,
+          as: "guards",
+          through: {
+            where: { status: "accepted" },
+          },
+          required: true,
+        },
+      ],
+    });
 
     for (const shift of shifts) {
-      const guardAssignment = shift.StaticGuards;
+      const shiftStart = moment(shift.startTime).tz(tz);
+      const shiftEnd = shift.endTime
+        ? moment(shift.endTime).tz(tz)
+        : null;
 
-      if (!guardAssignment.clockInTime) {
-        await shift.update({ status: "absent" });
+      for (const guard of shift.guards) {
+        const assignment = guard.StaticGuards;
 
-        await guardAssignment.update({
-          status: "absent",
-        });
+        /**
+         * 🟡 CASE 1: Upcoming → no clock-in after 10 mins
+         */
+        if (
+          shift.status === "upcoming" &&
+          now.isAfter(shiftStart.clone().add(graceMinutes, "minutes")) &&
+          !assignment.clockInTime
+        ) {
+          await shift.update({ status: "absent" });
+          await assignment.update({ status: "absent" });
 
-        console.log(`Shift ${shift.id} marked as ABSENT`);
+          console.log(
+            `Shift ${shift.id} marked ABSENT (no clock-in) for guard ${guard.id}`
+          );
+        }
+
+        /**
+         * 🔴 CASE 2: Ongoing → no clock-out after end + 10 mins
+         */
+        if (
+          shift.status === "ongoing" &&
+          shiftEnd &&
+          now.isAfter(shiftEnd.clone().add(graceMinutes, "minutes")) &&
+          !assignment.clockOutTime
+        ) {
+          await shift.update({ status: "absent" });
+          await assignment.update({ status: "absent" });
+
+          console.log(
+            `Shift ${shift.id} marked ABSENT (no clock-out) for guard ${guard.id}`
+          );
+        }
       }
     }
   } catch (error) {
     console.error("ABSENT CRON ERROR:", error);
   }
 });
+
+
 
 export default updateOrderStatuses;
