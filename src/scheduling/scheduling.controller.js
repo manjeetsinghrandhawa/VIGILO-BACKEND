@@ -977,9 +977,29 @@ if (activeShift) {
     }
 
     // ⚠️ Shift already completed (clock-in after endTime but within 1 hr)
-    if (now > shiftEnd && now <= oneHourAfterEnd) {
-      warnings.push("Shift time already completed");
-    }
+// ❌ Shift completed → mark ABSENT and block clock-in
+if (now > shiftEnd && now <= oneHourAfterEnd) {
+  // 🔴 Mark assignment absent
+  assignment.status = "absent";
+  await assignment.save();
+
+  // 🔴 Mark shift absent
+  await shift.update({ status: "absent" });
+
+  return res.status(400).json({
+    success: false,
+    message: "Shift already completed. You are marked absent.",
+    data: {
+      shiftId: shift.id,
+      shiftDate: formatDate(shiftStart),
+      shiftStartTime: formatTime(shiftStart),
+      shiftEndTime: formatTime(shiftEnd),
+      attemptedAt: formatTime(now),
+      status: "absent",
+    },
+  });
+}
+
 
     // 🚫 No overtime if next shift starts immediately
     const nextShift = await ShiftGuardModel.findOne({
