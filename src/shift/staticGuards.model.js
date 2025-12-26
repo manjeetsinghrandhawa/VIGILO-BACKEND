@@ -62,6 +62,10 @@ const StaticGuards = sequelize.define(
     },
 
     /** 🔥 OVERTIME FIELDS (MISSING EARLIER) */
+        overtimeStartTime: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
 
 
     overtimeEndTime: {

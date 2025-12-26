@@ -31,23 +31,28 @@ const Incident = sequelize.define("Incident", {
     paranoid: true,
   });
 
-Incident.belongsTo(Static, {
-  foreignKey: "shiftId",
-  as: "shift",
-  onDelete: "CASCADE",
-});
+Incident.associate = () => {
 
-Incident.belongsTo(User, {
-  foreignKey: "reportedBy",
-  as: "reporter",
-  onDelete: "SET NULL",
-});
+   const { Static, User } = sequelize.models;
 
-Incident.belongsTo(User, {
-  foreignKey: "assignedGuard",
-  as: "assignedGuardUser",
-  onDelete: "SET NULL",
-});
+  Incident.belongsTo(Static, {
+    foreignKey: "shiftId",
+    as: "shift",
+    onDelete: "CASCADE",
+  });
+
+  Incident.belongsTo(User, {
+    foreignKey: "reportedBy",
+    as: "reporter",
+    onDelete: "SET NULL",
+  });
+
+  Incident.belongsTo(User, {
+    foreignKey: "assignedGuard",
+    as: "assignedGuardUser",
+    onDelete: "SET NULL",
+  });
+};
 
 
 export default Incident;

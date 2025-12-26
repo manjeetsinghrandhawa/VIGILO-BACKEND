@@ -106,8 +106,19 @@ cron.schedule("*/10 * * * *", async () => {
       for (const guard of shift.guards) {
         const assignment = guard.StaticGuards;
 
+         // 🔵 MISSED RESPOND
+    if (
+      shift.status === "pending" &&
+      assignment.status === "pending" &&
+      now.isSameOrAfter(shiftStart)
+    ) {
+      await shift.update({ status: "missed_respond" });
+      await assignment.update({ status: "missed_respond" });
+      continue;
+    }
+
         /**
-         * 🟡 CASE 1: Upcoming → no clock-in after 10 mins
+         * 🟡 CASE 2: Upcoming → no clock-in after 10 mins
          */
         if (
           shift.status === "upcoming" &&
@@ -123,7 +134,7 @@ cron.schedule("*/10 * * * *", async () => {
         }
 
         /**
-         * 🔴 CASE 2: Ongoing → no clock-out after end + 10 mins
+         * 🔴 CASE 3: Ongoing → no clock-out after end + 10 mins
          */
         if (
           shift.status === "ongoing" &&

@@ -267,25 +267,77 @@ export const respondToShift = async (req, res, next) => {
 };
 
 
-export const getStaticShiftById = catchAsyncError(async (req, res, next) => {
+export const getStaticShiftById = async (req, res, next) => {
   const { id } = req.params;
-  const userId = req.user?.id;
+  const guardId = req.user?.id;
 
-  if (!userId) {
+  if (!guardId) {
     return next(
       new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
     );
   }
 
   const staticShift = await Static.findByPk(id, {
+    attributes: [
+      "id",
+      "orderId",
+      "type",
+      "description",
+      "startTime",
+      "endTime",
+      "status",
+      "createdAt",
+      "updatedAt",
+    ],
     include: [
+      /** 🔹 Guard assignment (pivot data) */
       {
         model: User,
         as: "guards",
+        where: { id: guardId },
+        required: true,
         attributes: ["id", "name", "email"],
-        where: { id: userId }, 
-        required: false,
-        through: { attributes: ["status", "createdAt", "updatedAt"] },
+        through: {
+          attributes: [
+            "status",
+            "clockInTime",
+            "clockOutTime",
+            "overtimeStartTime",
+            "overtimeEndTime",
+            "overtimeHours",
+            "totalHours",
+            "createdAt",
+            "updatedAt",
+          ],
+        },
+      },
+
+      /** 🔹 Order / site info */
+      {
+        model: Order,
+        as: "order",
+        attributes: ["locationName", "locationAddress"],
+      },
+
+      /** 🔹 Incidents of this shift */
+      {
+        model: Incident,
+        as: "incidents",
+        attributes: [
+          "id",
+          "name",
+          "location",
+          "description",
+          "images",
+          "createdAt",
+        ],
+        include: [
+          {
+            model: User,
+            as: "reporter",
+            attributes: ["id", "name", "email"],
+          },
+        ],
       },
     ],
   });
@@ -294,10 +346,53 @@ export const getStaticShiftById = catchAsyncError(async (req, res, next) => {
     return next(new ErrorHandler("Shift not found", StatusCodes.NOT_FOUND));
   }
 
+  /** 🔹 Extract guard + pivot */
+  const guard = staticShift.guards[0];
+  const pivot = guard.StaticGuards;
+
   res.status(StatusCodes.OK).json({
     success: true,
     message: "Shift fetched successfully",
-    data: staticShift,
+    data: {
+      shift: {
+        id: staticShift.id,
+        type: staticShift.type,
+        description: staticShift.description,
+        status: staticShift.status,
+        startTime: staticShift.startTime,
+        endTime: staticShift.endTime,
+      },
+
+      order: staticShift.order
+        ? {
+            locationName: staticShift.order.locationName,
+            locationAddress: staticShift.order.locationAddress,
+          }
+        : null,
+
+      guard: {
+        id: guard.id,
+        name: guard.name,
+        email: guard.email,
+
+        assignment: {
+          status: pivot.status,
+          clockInTime: pivot.clockInTime,
+          clockOutTime: pivot.clockOutTime,
+
+          overtime: {
+            startTime: pivot.overtimeStartTime,
+            endTime: pivot.overtimeEndTime,
+            hours: pivot.overtimeHours,
+          },
+
+          totalHours: pivot.totalHours,
+        },
+      },
+
+      incidents: staticShift.incidents || [],
+    },
   });
-});
+};
+
 

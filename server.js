@@ -2,6 +2,22 @@ import sequelize from "./config/database.js";
 import app from './app.js';
 import "./src/cron/statusUpdates.js";
 
+// Import ALL models first
+import "./src/shift/static.model.js";
+import "./src/user/user.model.js";
+import "./src/incident/incident.model.js";
+import "./src/invoicing/invoicing.model.js"
+
+// 🔥 CALL ASSOCIATIONS AFTER ALL MODELS ARE LOADED
+Object.values(sequelize.models).forEach((model) => {
+  if (model.associate) {
+    model.associate();
+  }
+});
+
+// then sync
+await sequelize.sync();
+
 
 app.get("/", (req, res) => {
   res.send("Hello World from Node.js + Express + Sequelize + Postgres (Render)!");

@@ -2,6 +2,7 @@ import { DataTypes } from "sequelize";
 import sequelize from "../../config/database.js";
 import Order from "../order/order.model.js";
 import User from "../user/user.model.js";
+import Incident from "../incident/incident.model.js";
 
 const Static = sequelize.define(
   "Static",
@@ -68,6 +69,10 @@ Static.belongsTo(Order, {
   as: "order",
 });
 
+Static.hasMany(Incident, {
+  foreignKey: "shiftId",
+  as: "incidents",
+});
 
 
 

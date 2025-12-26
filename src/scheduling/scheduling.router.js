@@ -11,7 +11,8 @@ import {
   clockOut,
   getMyTodayShiftCard,
   startOvertime,
-  endOvertime
+  endOvertime,
+  getMyShiftsByDate
   
 } from "./scheduling.controller.js";
 import { auth, isGaurd, isAdmin } from "../../middlewares/auth.js";
@@ -47,6 +48,8 @@ router.get("/getMyTodayShiftCard",auth,isGaurd, getMyTodayShiftCard);
 router.post("/startOvertime",auth,isGaurd, startOvertime );
 
 router.post("/endOvertime",auth,isGaurd, endOvertime);
+
+router.post("/getMyShiftsByDate",auth,isGaurd, getMyShiftsByDate);
 
 
 

@@ -326,31 +326,7 @@ export const getMyAllShifts = async (req, res, next) => {
 
       let finalStatus = shift.status;
 
-      /**
-       * ❌ Only auto-update:
-       * pending → missed_respond
-       */
-      if (
-        shift.status === "pending" &&
-        assignmentStatus === "pending"
-      ) {
-        const endLocal = moment(shift.endTime).tz(tz);
-
-        if (now.isAfter(endLocal)) {
-          finalStatus = "missed_respond";
-
-          // 🔥 Persist once
-          if (finalStatus !== shift.status) {
-            try {
-              await shift.update({ status: finalStatus });
-            } catch (err) {
-              console.warn(
-                `Shift ${shift.id} missed_respond update failed`
-              );
-            }
-          }
-        }
-      }
+    
 
       response.push({
         id: shift.id,
@@ -1203,7 +1179,9 @@ export const getMyTodayShiftCard = async (req, res) => {
           where: { id: guardId },
           through: {
             where: { status: "ongoing" },
-            attributes: ["clockInTime", "clockOutTime"],
+            attributes: ["clockInTime", "clockOutTime","overtimeStartTime",
+    "overtimeEndTime",
+    "overtimeHours"],
           },
           required: true,
         },
@@ -1264,6 +1242,11 @@ export const getMyTodayShiftCard = async (req, res) => {
      */
     const guard = shift.guards[0];
     const pivot = guard.StaticGuards;
+    const overtimeStartTime = pivot?.overtimeStartTime || null;
+const overtimeEndTime = pivot?.overtimeEndTime || null;
+const overtimeHours = pivot?.overtimeHours || null;
+
+
 
     const clockInTime = pivot?.clockInTime || null;
     const clockOutTime = pivot?.clockOutTime || null;
@@ -1298,6 +1281,14 @@ export const getMyTodayShiftCard = async (req, res) => {
           clockInTime,
           clockOutTime,
           totalLoginHours,
+
+           overtime: {
+    overtimestartTime: overtimeStartTime,
+    overtimeendTime: overtimeEndTime,
+    overtimehours: overtimeHours,
+  },
+
+  totalLoginHours,
         },
 
         clockInInfo:
@@ -1408,8 +1399,8 @@ export const startOvertime = async (req, res) => {
       data: {
         shiftId: staticId,
         guardId,
-        overtimeStartTime: formatTime(now),
-        allowedTill: formatTime(overtimeDeadline),
+        overtimeStartTime: assignment.overtimeStartTime,
+        allowedTill: overtimeDeadline,
       },
     });
   } catch (error) {
@@ -1484,7 +1475,7 @@ export const endOvertime = async (req, res) => {
     const clockOut = new Date(assignment.clockOutTime);
 
     // ⏱️ TEMP: Overtime starts from clockOutTime
-    const overtimeStart = clockOut;
+    const overtimeStart = new Date(assignment.overtimeStartTime);
 
     const shiftMs = clockOut - clockIn;
     const overtimeMs = now - overtimeStart;
@@ -1534,6 +1525,7 @@ export const endOvertime = async (req, res) => {
         timing: {
           clockInTime: clockIn,
           clockOutTime: clockOut,
+          overtimeStartTime: overtimeStart,
           overtimeEndTime: now,
         },
         duration: {
@@ -1546,6 +1538,128 @@ export const endOvertime = async (req, res) => {
   } catch (error) {
     console.error("END OVERTIME ERROR:", error);
     return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+export const getMyShiftsByDate = async (req, res, next) => {
+  try {
+    const guardId = req.user?.id;
+
+    if (!guardId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
+
+    const { date } = req.body;
+
+    if (!date) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Date is required (YYYY-MM-DD)",
+      });
+    }
+
+    const tz = getTimeZone();
+
+    // 🔥 Create day range (local → UTC safe)
+    const startOfDay = moment.tz(date, tz).startOf("day").toDate();
+    const endOfDay = moment.tz(date, tz).endOf("day").toDate();
+
+const shifts = await Static.findAll({
+  where: {
+    startTime: {
+      [Op.between]: [startOfDay, endOfDay],
+    },
+  },
+  attributes: [
+    "id",
+    "orderId",
+    "type",
+    "description",
+    "startTime",
+    "endTime",
+    "status",
+    "createdAt",
+  ],
+  include: [
+    {
+      model: Order,
+      as: "order",
+      attributes: ["locationName", "locationAddress"],
+    },
+    {
+      model: User,
+      as: "guards",
+      where: { id: guardId },
+      attributes: ["id", "name", "email"],
+      through: {
+        attributes: ["status", "createdAt"],
+      },
+      required: true,
+    },
+    {
+      model: Incident,
+      as: "incidents",
+      required: false, // 🔑 VERY IMPORTANT (don’t filter shifts)
+      attributes: [
+        "id",
+        "name",
+        "location",
+        "description",
+        "images",
+        "createdAt",
+      ],
+    },
+  ],
+  order: [["startTime", "ASC"]],
+});
+
+
+    const response = shifts.map((shift) => {
+  const guard = shift.guards[0];
+
+  return {
+    id: shift.id,
+    orderId: shift.orderId,
+    orderLocationName: shift.order?.locationName || null,
+    orderLocationAddress: shift.order?.locationAddress || null,
+    date: moment(shift.startTime).tz(tz).format("YYYY-MM-DD"),
+    type: shift.type,
+    description: shift.description,
+    startTime: shift.startTime,
+    endTime: shift.endTime,
+    status: shift.status,
+    createdAt: shift.createdAt,
+
+    guard: {
+      id: guard.id,
+      name: guard.name,
+      email: guard.email,
+      assignmentStatus: guard.StaticGuards?.status,
+      assignedAt: guard.StaticGuards?.createdAt,
+    },
+
+    incidents: shift.incidents || [],
+    incidentsCount: shift.incidents?.length || 0,
+  };
+});
+
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Shifts fetched successfully for selected date",
+      date,
+      count: response.length,
+      data: response,
+    });
+  } catch (error) {
+    console.error("GET MY SHIFTS BY DATE ERROR:", error.stack || error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Internal server error",
       error: error.message,
