@@ -9,6 +9,7 @@ import { StatusCodes } from "http-status-codes";
 import Order from "../order/order.model.js";
 import StaticGuards from "../shift/staticGuards.model.js";
 import ErrorHandler from "../../utils/errorHandler.js";
+import Incident from "../incident/incident.model.js";
 
 export const createSchedule = async (req, res, next) => {
   try {
