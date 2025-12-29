@@ -82,7 +82,7 @@ cron.schedule("*/10 * * * *", async () => {
     const shifts = await Static.findAll({
       where: {
         status: {
-          [Op.in]: ["upcoming", "ongoing"],
+          [Op.in]: ["pending","upcoming", "ongoing","overtime_started"],
         },
       },
       include: [
@@ -90,7 +90,16 @@ cron.schedule("*/10 * * * *", async () => {
           model: User,
           as: "guards",
           through: {
-            where: { status: "accepted" },
+             where: {
+              status: {
+                [Op.in]: [
+                  "pending",
+                  "accepted",
+                  "ongoing",
+                  "overtime_started",
+                ],
+              },
+            },
           },
           required: true,
         },
@@ -148,6 +157,28 @@ cron.schedule("*/10 * * * *", async () => {
           console.log(
             `Shift ${shift.id} marked ABSENT (no clock-out) for guard ${guard.id}`
           );
+        }
+        /* 🟣 CASE 4: OVERTIME → MISSED END OVERTIME (3 HOURS) */
+        if (shift.status === "overtime_started" &&
+          assignment.status === "overtime_started" &&
+          assignment.overtimeStartTime
+        ) {
+          const overtimeStart = moment(
+            assignment.overtimeStartTime
+          ).tz(tz);
+
+          const overtimeLimit = overtimeStart.clone().add(3, "hours");
+
+          if (now.isSameOrAfter(overtimeLimit)) {
+            await assignment.update({ status: "missed_endovertime" });
+
+            // Optional: update shift only if needed
+            await shift.update({ status: "missed_endovertime" });
+
+            console.log(
+              `Shift ${shift.id} → MISSED_ENDOVERTIME (Guard ${guard.id})`
+            );
+          }
         }
       }
     }

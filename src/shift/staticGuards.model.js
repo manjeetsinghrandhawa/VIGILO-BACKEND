@@ -45,7 +45,8 @@ const StaticGuards = sequelize.define(
         "missed",
         "overtime_started",
         "overtime_ended",
-        "missed_respond"
+        "missed_respond",
+        "missed_endovertime"
       ),
       allowNull: false,
       defaultValue: "pending",
