@@ -1370,7 +1370,6 @@ export const startOvertime = async (req, res) => {
     }
 
     const shift = assignment.static;
-
     if (!shift) {
       return res.status(404).json({
         success: false,
@@ -1378,36 +1377,8 @@ export const startOvertime = async (req, res) => {
       });
     }
 
-    // 🚫 Must be clocked out
-    if (!assignment.clockOutTime) {
-      return res.status(400).json({
-        success: false,
-        message: "You must clock out before starting overtime",
-      });
-    }
-
-    // 🚫 Shift must be completed
-    if (assignment.status !== "completed" || shift.status !== "completed") {
-      return res.status(400).json({
-        success: false,
-        message: "Overtime can be started only after shift completion",
-      });
-    }
-
     const now = new Date();
-    const clockOutTime = new Date(assignment.clockOutTime);
-
-    // ⏱️ 30-minute window after clock-out
-    const overtimeDeadline = new Date(
-      clockOutTime.getTime() + 30 * 60 * 1000
-    );
-
-    if (now > overtimeDeadline) {
-      return res.status(400).json({
-        success: false,
-        message: "Overtime window expired (30 minutes exceeded)",
-      });
-    }
+    const shiftEndTime = new Date(shift.endTime);
 
     // 🚫 Already started
     if (assignment.status === "overtime_started") {
@@ -1415,6 +1386,53 @@ export const startOvertime = async (req, res) => {
         success: false,
         message: "Overtime already started",
       });
+    }
+
+    /**
+     * ✅ CASE 1: Completed shift
+     */
+    const completedCase =
+      assignment.status === "completed" &&
+      shift.status === "completed";
+
+    /**
+     * ✅ CASE 2: Ongoing shift but end time passed
+     */
+    const ongoingOvertimeCase =
+      assignment.status === "ongoing" &&
+      shift.status === "ongoing" &&
+      now > shiftEndTime;
+
+    if (!completedCase && !ongoingOvertimeCase) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Overtime can be started only after shift end or completion",
+      });
+    }
+
+    // ⏱️ Apply 30-minute rule ONLY for completed shifts
+    let allowedTill = null;
+
+    if (completedCase) {
+      if (!assignment.clockOutTime) {
+        return res.status(400).json({
+          success: false,
+          message: "Clock-out required before overtime",
+        });
+      }
+
+      const clockOutTime = new Date(assignment.clockOutTime);
+      allowedTill = new Date(
+        clockOutTime.getTime() + 30 * 60 * 1000
+      );
+
+      if (now > allowedTill) {
+        return res.status(400).json({
+          success: false,
+          message: "Overtime window expired (30 minutes exceeded)",
+        });
+      }
     }
 
     // ✅ START OVERTIME
@@ -1431,7 +1449,7 @@ export const startOvertime = async (req, res) => {
         shiftId: staticId,
         guardId,
         overtimeStartTime: assignment.overtimeStartTime,
-        allowedTill: overtimeDeadline,
+        allowedTill, // null for ongoing case
       },
     });
   } catch (error) {
