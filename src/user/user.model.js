@@ -1,6 +1,6 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../../config/database.js";
-
+import Notification from "../notifications/notifications.model.js";
 const User = sequelize.define(
   "User",
   {
@@ -87,5 +87,11 @@ const User = sequelize.define(
     paranoid: true, 
   }
 );
+
+User.hasMany(Notification, {
+  foreignKey: "userId",
+  as: "notifications",
+});
+
 
 export default User;
