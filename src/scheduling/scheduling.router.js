@@ -12,7 +12,9 @@ import {
   getMyTodayShiftCard,
   startOvertime,
   endOvertime,
-  getMyShiftsByDate
+  getMyShiftsByDate,
+  requestOffStaticShift,
+  requestChangeStaticShift
   
 } from "./scheduling.controller.js";
 import { auth, isGaurd, isAdmin } from "../../middlewares/auth.js";
@@ -50,6 +52,10 @@ router.post("/startOvertime",auth,isGaurd, startOvertime );
 router.post("/endOvertime",auth,isGaurd, endOvertime);
 
 router.post("/getMyShiftsByDate",auth,isGaurd, getMyShiftsByDate);
+
+router.post("/requestOffStaticShift",auth,isGaurd, requestOffStaticShift );
+
+router.post("/requestChangeStaticShift",auth,isGaurd, requestChangeStaticShift );
 
 
 

@@ -46,11 +46,84 @@ const StaticGuards = sequelize.define(
         "overtime_started",
         "overtime_ended",
         "missed_respond",
-        "missed_endovertime"
+        "missed_endovertime",
+        // 🆕 REQUEST OFF
+    "request_off_pending",
+    "request_off_approved",
+    "request_off_rejected"
       ),
       allowNull: false,
       defaultValue: "pending",
     },
+
+    /* 🆕 REQUEST OFF STATUS (SEPARATE) */
+requestOffStatus: {
+  type: DataTypes.ENUM("none", "pending", "approved", "rejected"),
+  defaultValue: "none",
+  allowNull: false,
+},
+
+    /* 🆕 REQUEST OFF FIELDS */
+requestOffDate: {
+  type: DataTypes.DATEONLY,
+  allowNull: true,
+},
+
+requestOffReason: {
+  type: DataTypes.STRING,
+  allowNull: true,
+},
+
+requestOffNotes: {
+  type: DataTypes.TEXT,
+  allowNull: true,
+},
+
+requestOffRequestedAt: {
+  type: DataTypes.DATE,
+  allowNull: true,
+},
+
+requestOffActionedAt: {
+  type: DataTypes.DATE,
+  allowNull: true,
+},
+
+requestOffActionedBy: {
+  type: DataTypes.UUID,
+  allowNull: true, // admin id
+},
+
+changeShiftStatus: {
+  type: DataTypes.ENUM("pending", "approved", "rejected"),
+  allowNull: true,
+},
+
+changeShiftDate: {
+  type: DataTypes.DATEONLY,
+  allowNull: true,
+},
+
+changeShiftStartTime: {
+  type: DataTypes.TIME,
+  allowNull: true,
+},
+
+changeShiftEndTime: {
+  type: DataTypes.TIME,
+  allowNull: true,
+},
+
+changeShiftReason: {
+  type: DataTypes.TEXT,
+  allowNull: true,
+},
+
+changeShiftRequestedAt: {
+  type: DataTypes.DATE,
+  allowNull: true,
+},
+
 
     clockInTime: {
       type: DataTypes.DATE,

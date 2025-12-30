@@ -1218,34 +1218,44 @@ export const getMyTodayShiftCard = async (req, res) => {
     /**
      * 2️⃣ NEXT UPCOMING shift (future OR within grace window)
      */
-    if (!shift) {
-      shift = await Static.findOne({
-        where: {
-          status: "upcoming",
-          startTime: {
-            [Op.lte]: moment(now).add(graceMinutes, "minutes").toDate(),
-          },
+    /**
+ * 2️⃣ NEXT UPCOMING shift (nearest future)
+ */
+if (!shift) {
+  shift = await Static.findOne({
+    where: {
+      status: "upcoming",
+      startTime: {
+        [Op.gte]: now.toDate(), // ✅ FIX
+      },
+    },
+    include: [
+      {
+        model: User,
+        as: "guards",
+        where: { id: guardId },
+        through: {
+          where: { status: "accepted" },
+          attributes: [
+            "clockInTime",
+            "clockOutTime",
+            "overtimeStartTime",
+            "overtimeEndTime",
+            "overtimeHours",
+          ],
         },
-        include: [
-          {
-            model: User,
-            as: "guards",
-            where: { id: guardId },
-            through: {
-              where: { status: "accepted" },
-              attributes: ["clockInTime", "clockOutTime"],
-            },
-            required: true,
-          },
-          {
-            model: Order,
-            as: "order",
-            attributes: ["locationName", "locationAddress"],
-          },
-        ],
-        order: [["startTime", "ASC"]], // nearest shift
-      });
-    }
+        required: true,
+      },
+      {
+        model: Order,
+        as: "order",
+        attributes: ["locationName", "locationAddress"],
+      },
+    ],
+    order: [["startTime", "ASC"]], // ✅ nearest upcoming
+  });
+}
+
 
     /**
      * 3️⃣ No shift
@@ -1687,6 +1697,176 @@ const shifts = await Static.findAll({
     });
   }
 };
+
+export const requestOffStaticShift = async (req, res) => {
+  try {
+    const { staticId, requestOffDate, reason, notes } = req.body;
+    const guardId = req.user.id;
+
+    if (!staticId || !requestOffDate || !reason) {
+      return res.status(400).json({
+        success: false,
+        message: "staticId, requestOffDate and reason are required",
+      });
+    }
+
+    const assignment = await StaticGuards.findOne({
+      where: { staticId, guardId },
+      include: [{ model: Static, as: "static" }],
+    });
+
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        message: "Shift assignment not found",
+      });
+    }
+
+    /* 🚫 Allow request-off ONLY for UPCOMING shifts */
+    if (!["upcoming", "accepted"].includes(assignment.status)) {
+  return res.status(400).json({
+    success: false,
+    message: "Request off is allowed only for upcoming or accepted shifts",
+  });
+}
+
+
+    /* 🚫 Prevent duplicate request */
+    if (assignment.requestOffStatus === "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Request off already submitted",
+      });
+    }
+
+    await assignment.update({
+      requestOffStatus: "pending",
+      requestOffDate,
+      requestOffReason: reason,
+      requestOffNotes: notes || null,
+      requestOffRequestedAt: new Date(),
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Request off submitted successfully",
+      data: {
+        staticId,
+        guardId,
+
+        // ✅ Actual shift status remains unchanged
+        shiftStatus: assignment.static?.status,
+        shiftStartTime: assignment.static.startTime,
+        shiftEndTime: assignment.static.endTime,
+        shiftDate: assignment.static.startTime,
+
+        // ✅ Separate request off status
+        requestOffStatus: "pending",
+
+        requestOffDate,
+      },
+    });
+  } catch (error) {
+    console.error("REQUEST OFF ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+export const requestChangeStaticShift = async (req, res) => {
+  try {
+    const {
+      staticId,
+      changeDate,
+      startTime,
+      endTime,
+      reason,
+    } = req.body;
+
+    const guardId = req.user.id;
+
+    if (!staticId || !changeDate || !startTime || !endTime || !reason) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "staticId, changeDate, startTime, endTime and reason are required",
+      });
+    }
+
+    const assignment = await StaticGuards.findOne({
+      where: { staticId, guardId },
+      include: [{ model: Static, as: "static" }],
+    });
+
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        message: "Shift assignment not found",
+      });
+    }
+
+    /* ✅ Only UPCOMING shifts allowed */
+    if (!["upcoming", "accepted"].includes(assignment.status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Change shift request is allowed only for upcoming shifts",
+      });
+    }
+
+    /* 🚫 Prevent duplicate request */
+    if (assignment.changeShiftStatus === "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Change shift request already submitted",
+      });
+    }
+
+    await assignment.update({
+      changeShiftStatus: "pending",
+      changeShiftDate: changeDate,
+      changeShiftStartTime: startTime,
+      changeShiftEndTime: endTime,
+      changeShiftReason: reason,
+      changeShiftRequestedAt: new Date(),
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Change shift request submitted successfully",
+      data: {
+        /* 🔑 IDs */
+        staticId,
+        guardId,
+
+        /* 🔁 ACTUAL SHIFT DATA (UNCHANGED) */
+        shiftStatus: assignment.static?.status,
+        shiftStartTime: assignment.static.startTime,
+        shiftEndTime: assignment.static.endTime,
+        shiftDate: assignment.static.startTime,
+
+        /* 🔄 CHANGE SHIFT REQUEST DATA */
+        changeShiftStatus: "pending",
+        requestedDate: changeDate,
+        requestedStartTime: startTime,
+        requestedEndTime: endTime,
+        reason,
+
+        requestedAt: assignment.changeShiftRequestedAt,
+      },
+    });
+  } catch (error) {
+    console.error("CHANGE SHIFT ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+
+
 
 
 
