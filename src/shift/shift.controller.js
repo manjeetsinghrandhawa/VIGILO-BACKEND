@@ -240,17 +240,59 @@ export const respondToShift = async (req, res, next) => {
     }
 
     // 4️⃣ Update guard response
-    staticGuard.status = status;
-    await staticGuard.save();
+    // 4️⃣ Update guard response
+staticGuard.status = status;
+await staticGuard.save();
 
-    // 5️⃣ Update shift status based on guard response
-    if (status === "accepted") {
-      await shift.update({ status: "upcoming" });
-    }
+// 5️⃣ Update shift status
+if (status === "accepted") {
+  await shift.update({ status: "upcoming" });
+}
 
-    if (status === "rejected") {
-      await shift.update({ status: "cancelled" });
-    }
+if (status === "rejected") {
+  await shift.update({ status: "cancelled" });
+}
+
+// 🔔 Notifications
+const guard = await User.findByPk(userId, {
+  attributes: ["id", "name", "email"],
+});
+
+// Guard notification
+await Notification.create({
+  userId,
+  role: "guard",
+  title: "Shift Response Recorded",
+  message: `You have ${status} the shift successfully.`,
+  type: "SHIFT_RESPONSE",
+  data: {
+    staticId,
+    response: status,
+  },
+});
+
+// Admin notifications
+const admins = await User.findAll({
+  where: { role: "admin" },
+  attributes: ["id"],
+});
+
+await Notification.bulkCreate(
+  admins.map((admin) => ({
+    userId: admin.id,
+    role: "admin",
+    title: "Shift Response Update",
+    message: `Guard ${guard?.name || "Guard"} has ${status} the shift.`,
+    type: "SHIFT_RESPONSE",
+    data: {
+      staticId,
+      guardId: userId,
+      guardName: guard?.name,
+      response: status,
+    },
+  }))
+);
+
 
     res.status(StatusCodes.OK).json({
       success: true,

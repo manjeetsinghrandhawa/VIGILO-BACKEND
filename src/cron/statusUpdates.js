@@ -6,6 +6,8 @@ import Static from "../shift/static.model.js";
 import StaticGuards from "../shift/staticGuards.model.js";
 import User from "../user/user.model.js";
 import { getTimeZone } from "../../utils/timeZone.js";
+import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
+
 
 const updateOrderStatuses = async () => {
   const tz = getTimeZone(); 
@@ -117,69 +119,90 @@ cron.schedule("*/10 * * * *", async () => {
 
          // 🔵 MISSED RESPOND
     if (
-      shift.status === "pending" &&
-      assignment.status === "pending" &&
-      now.isSameOrAfter(shiftStart)
-    ) {
-      await shift.update({ status: "missed_respond" });
-      await assignment.update({ status: "missed_respond" });
-      continue;
-    }
+  shift.status === "pending" &&
+  assignment.status === "pending" &&
+  now.isSameOrAfter(shiftStart)
+) {
+  await shift.update({ status: "missed_respond" });
+  await assignment.update({ status: "missed_respond" });
+
+  await notifyGuardAndAdmin({
+    guardId: guard.id,
+    shiftId: shift.id,
+    status: "missed_respond",
+    guardMessage: "You missed responding to a shift assignment.",
+    adminMessage: `Guard ${guard.name} missed responding to shift.`,
+  });
+
+  continue;
+}
+
 
         /**
          * 🟡 CASE 2: Upcoming → no clock-in after 10 mins
          */
         if (
-          shift.status === "upcoming" &&
-          now.isAfter(shiftStart.clone().add(graceMinutes, "minutes")) &&
-          !assignment.clockInTime
-        ) {
-          await shift.update({ status: "absent" });
-          await assignment.update({ status: "absent" });
+  shift.status === "upcoming" &&
+  now.isAfter(shiftStart.clone().add(graceMinutes, "minutes")) &&
+  !assignment.clockInTime
+) {
+  await shift.update({ status: "absent" });
+  await assignment.update({ status: "absent" });
 
-          console.log(
-            `Shift ${shift.id} marked ABSENT (no clock-in) for guard ${guard.id}`
-          );
-        }
+  await notifyGuardAndAdmin({
+    guardId: guard.id,
+    shiftId: shift.id,
+    status: "absent",
+    guardMessage: "You were marked absent due to no clock-in.",
+    adminMessage: `Guard ${guard.name} marked absent (no clock-in).`,
+  });
+}
+
 
         /**
          * 🔴 CASE 3: Ongoing → no clock-out after end + 10 mins
          */
         if (
-          shift.status === "ongoing" &&
-          shiftEnd &&
-          now.isAfter(shiftEnd.clone().add(graceMinutes, "minutes")) &&
-          !assignment.clockOutTime
-        ) {
-          await shift.update({ status: "absent" });
-          await assignment.update({ status: "absent" });
+  shift.status === "ongoing" &&
+  shiftEnd &&
+  now.isAfter(shiftEnd.clone().add(graceMinutes, "minutes")) &&
+  !assignment.clockOutTime
+) {
+  await shift.update({ status: "absent" });
+  await assignment.update({ status: "absent" });
 
-          console.log(
-            `Shift ${shift.id} marked ABSENT (no clock-out) for guard ${guard.id}`
-          );
-        }
+  await notifyGuardAndAdmin({
+    guardId: guard.id,
+    shiftId: shift.id,
+    status: "absent",
+    guardMessage: "You were marked absent due to no clock-out.",
+    adminMessage: `Guard ${guard.name} marked absent (no clock-out).`,
+  });
+}
+
         /* 🟣 CASE 4: OVERTIME → MISSED END OVERTIME (3 HOURS) */
-        if (shift.status === "overtime_started" &&
-          assignment.status === "overtime_started" &&
-          assignment.overtimeStartTime
-        ) {
-          const overtimeStart = moment(
-            assignment.overtimeStartTime
-          ).tz(tz);
+        if (
+  shift.status === "overtime_started" &&
+  assignment.status === "overtime_started" &&
+  assignment.overtimeStartTime
+) {
+  const overtimeStart = moment(assignment.overtimeStartTime).tz(tz);
+  const overtimeLimit = overtimeStart.clone().add(3, "hours");
 
-          const overtimeLimit = overtimeStart.clone().add(3, "hours");
+  if (now.isSameOrAfter(overtimeLimit)) {
+    await assignment.update({ status: "missed_endovertime" });
+    await shift.update({ status: "missed_endovertime" });
 
-          if (now.isSameOrAfter(overtimeLimit)) {
-            await assignment.update({ status: "missed_endovertime" });
+    await notifyGuardAndAdmin({
+      guardId: guard.id,
+      shiftId: shift.id,
+      status: "missed_endovertime",
+      guardMessage: "You missed ending your overtime.",
+      adminMessage: `Guard ${guard.name} missed ending overtime.`,
+    });
+  }
+}
 
-            // Optional: update shift only if needed
-            await shift.update({ status: "missed_endovertime" });
-
-            console.log(
-              `Shift ${shift.id} → MISSED_ENDOVERTIME (Guard ${guard.id})`
-            );
-          }
-        }
       }
     }
   } catch (error) {
