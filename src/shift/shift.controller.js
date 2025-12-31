@@ -8,6 +8,7 @@ import Static from "./static.model.js";
 import StaticGuards from "./staticGuards.model.js";
 import User from "../user/user.model.js";
 import Incident from "../incident/incident.model.js";
+import Notification from "../notifications/notifications.model.js";
 
 export const assignShift = catchAsyncError(async (req, res, next) => {
   const { orderId } = req.params;
