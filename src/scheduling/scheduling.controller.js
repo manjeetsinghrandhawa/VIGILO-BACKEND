@@ -1185,39 +1185,122 @@ export const getMyTodayShiftCard = async (req, res) => {
     const tz = getTimeZone();
     const now = moment().tz(tz);
     const graceMinutes = 10;
+    const COMPLETED_VISIBLE_MINUTES = 10;
+
 
     /**
-     * 1️⃣ ONGOING shift (highest priority)
-     */
-    let shift = await Static.findOne({
-      where: {
-        status: "ongoing",
+ * 0️⃣ OVERTIME STARTED shift (highest priority)
+ */
+let shift = await Static.findOne({
+  where: {
+    status: "overtime_started",
+  },
+  include: [
+    {
+      model: User,
+      as: "guards",
+      where: { id: guardId },
+      through: {
+        where: { status: "overtime_started" },
+        attributes: [
+          "clockInTime",
+          "clockOutTime",
+          "overtimeStartTime",
+          "overtimeEndTime",
+          "overtimeHours",
+        ],
       },
-      include: [
-        {
-          model: User,
-          as: "guards",
-          where: { id: guardId },
-          through: {
-            where: { status: "ongoing" },
-            attributes: ["clockInTime", "clockOutTime","overtimeStartTime",
-    "overtimeEndTime",
-    "overtimeHours"],
+      required: true,
+    },
+    {
+      model: Order,
+      as: "order",
+      attributes: ["locationName", "locationAddress"],
+    },
+  ],
+  order: [["startTime", "ASC"]],
+});
+
+/**
+ * 1️⃣ RECENTLY COMPLETED shift (within 10 minutes)
+ */
+if (!shift) {
+  const completedThreshold = moment(now)
+    .subtract(COMPLETED_VISIBLE_MINUTES, "minutes")
+    .toDate();
+
+  shift = await Static.findOne({
+    where: {
+      status: "completed",
+    },
+    include: [
+      {
+        model: User,
+        as: "guards",
+        where: { id: guardId },
+        through: {
+          where: {
+            status: "completed",
+            clockOutTime: {
+              [Op.gte]: completedThreshold, // 🔥 KEY LINE
+            },
           },
-          required: true,
+          attributes: [
+            "clockInTime",
+            "clockOutTime",
+            "overtimeStartTime",
+            "overtimeEndTime",
+            "overtimeHours",
+          ],
         },
-        {
-          model: Order,
-          as: "order",
-          attributes: ["locationName", "locationAddress"],
-        },
-      ],
-      order: [["startTime", "ASC"]],
-    });
+        required: true,
+      },
+      {
+        model: Order,
+        as: "order",
+        attributes: ["locationName", "locationAddress"],
+      },
+    ],
+    order: [["endTime", "DESC"]],
+  });
+}
+
 
     /**
-     * 2️⃣ NEXT UPCOMING shift (future OR within grace window)
-     */
+ * 1️⃣ ONGOING shift
+ */
+if (!shift) {
+  shift = await Static.findOne({
+    where: {
+      status: "ongoing",
+    },
+    include: [
+      {
+        model: User,
+        as: "guards",
+        where: { id: guardId },
+        through: {
+          where: { status: "ongoing" },
+          attributes: [
+            "clockInTime",
+            "clockOutTime",
+            "overtimeStartTime",
+            "overtimeEndTime",
+            "overtimeHours",
+          ],
+        },
+        required: true,
+      },
+      {
+        model: Order,
+        as: "order",
+        attributes: ["locationName", "locationAddress"],
+      },
+    ],
+    order: [["startTime", "ASC"]],
+  });
+}
+
     /**
  * 2️⃣ NEXT UPCOMING shift (nearest future)
  */
