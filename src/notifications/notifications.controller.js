@@ -1,17 +1,38 @@
 import Notification from "./notifications.model.js";
 
-
 export const getMyNotifications = async (req, res) => {
   try {
-    const userId = req.user.id; // guardId from auth middleware
+    // ✅ SAME PATTERN AS getProfile
+    const userId = req.userId;
 
-    const notifications = await Notification.findAll({
-      where: { userId },
-      order: [["createdAt", "DESC"]],
-    });
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    // 🔹 Pagination params
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const offset = (page - 1) * limit;
+
+    const { rows: notifications, count: total } =
+      await Notification.findAndCountAll({
+        where: { userId },
+        order: [["createdAt", "DESC"]],
+        limit,
+        offset,
+      });
 
     return res.status(200).json({
       success: true,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
       count: notifications.length,
       data: notifications,
     });

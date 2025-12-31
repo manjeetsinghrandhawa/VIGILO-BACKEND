@@ -15,6 +15,10 @@ const Notification = sequelize.define(
       type: DataTypes.UUID,
       allowNull: false,
     },
+    role: {
+      type: DataTypes.ENUM("admin", "guard", "user"),
+      allowNull: false,
+    },
 
     title: {
       type: DataTypes.STRING(150),
