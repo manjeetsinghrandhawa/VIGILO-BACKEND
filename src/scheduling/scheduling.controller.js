@@ -10,6 +10,8 @@ import Order from "../order/order.model.js";
 import StaticGuards from "../shift/staticGuards.model.js";
 import ErrorHandler from "../../utils/errorHandler.js";
 import Incident from "../incident/incident.model.js";
+import Notification from "../notifications/notifications.model.js";
+
 
 export const createSchedule = async (req, res, next) => {
   try {
@@ -95,6 +97,25 @@ const end = normalizedDate
         },
       ],
     });
+
+    // 🔔 Create notifications for assigned guards
+const notificationsPayload = guardIds.map((guardId) => ({
+  userId: guardId,
+  role: "guard",
+  title: "New Shift Assigned",
+  message: `A new shift has been assigned to you on ${normalizedDate || "scheduled date"} from ${startTime} to ${endTime}.`,
+  type: "SHIFT_ASSIGNED",
+  data: {
+    shiftId: staticShift.id,
+    orderId,
+    startTime,
+    endTime,
+    date: normalizedDate,
+  },
+}));
+
+await Notification.bulkCreate(notificationsPayload);
+
 
     return res.status(StatusCodes.CREATED).json({
       success: true,
