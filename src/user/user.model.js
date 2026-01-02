@@ -56,7 +56,7 @@ const User = sequelize.define(
       allowNull: true,
       validate: {
         len: {
-          args: [10, 15],
+          args: [7, 15],
           msg: "Mobile number must be between 10 to 15 digits",
         },
       },
