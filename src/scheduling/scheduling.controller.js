@@ -307,7 +307,8 @@ export const getMyAllShifts = async (req, res, next) => {
      /**
      * 📊 TOTAL COUNT (ALL SHIFTS – NO FILTER)
      */
-    const totalAllCount = await Static.count({
+    // ✅ ALL SHIFTS
+    const allCount = await Static.count({
       include: [
         {
           model: User,
@@ -319,18 +320,33 @@ export const getMyAllShifts = async (req, res, next) => {
       ],
     });
 
-    /**
-     * 📊 FILTERED COUNT
-     */
-    const filteredCount = await Static.count({
-      where: shiftWhere,
+    // ✅ UPCOMING SHIFTS
+    const upcomingCount = await Static.count({
+      where: { status: "upcoming" },
       include: [
         {
           model: User,
           as: "guards",
           where: { id: guardId },
           through: {
-            where: guardThroughWhere,
+            where: { status: "accepted" },
+            attributes: [],
+          },
+          required: true,
+        },
+      ],
+    });
+
+    // ✅ NEW REQUESTS
+    const newRequestsCount = await Static.count({
+      where: { status: "pending" },
+      include: [
+        {
+          model: User,
+          as: "guards",
+          where: { id: guardId },
+          through: {
+            where: { status: "pending" },
             attributes: [],
           },
           required: true,
@@ -412,9 +428,10 @@ export const getMyAllShifts = async (req, res, next) => {
       success: true,
       message: "Shifts fetched successfully",
       filter,
-      counts: {
-        all: totalAllCount,
-        filtered: filteredCount,
+       counts: {
+        all: allCount,
+        upcoming: upcomingCount,
+        newRequests: newRequestsCount,
       },
       data: response,
       pagination: {
