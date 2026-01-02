@@ -94,7 +94,7 @@ export const registerUser = catchAsyncError(async (req, res, next) => {
 
 
 export const registerGaurd = catchAsyncError(async (req, res, next) => {
-  const { name, email, password, address, mobile, avatar } = req.body;
+  const { name, email, password, address, mobile, countryCode, avatar } = req.body;
 
   if (!name || !email || !password || !address) {
     return next(
@@ -120,6 +120,7 @@ export const registerGaurd = catchAsyncError(async (req, res, next) => {
       user.address = address;
       if (mobile) user.mobile = mobile;
       if (avatar) user.avatar = avatar;
+      if (countryCode) user.countryCode = countryCode;
       await user.save();
 
       const expireIn = Date.now() + 5 * 60 * 1000;
@@ -151,6 +152,7 @@ export const registerGaurd = catchAsyncError(async (req, res, next) => {
     password: hashedPassword,
     role: "guard",
     mobile,
+    countryCode,
     avatar,
     address
   });
