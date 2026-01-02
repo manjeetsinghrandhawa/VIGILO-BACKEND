@@ -11,6 +11,7 @@ import StaticGuards from "../shift/staticGuards.model.js";
 import ErrorHandler from "../../utils/errorHandler.js";
 import Incident from "../incident/incident.model.js";
 import Notification from "../notifications/notifications.model.js";
+import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
 
 
 export const createSchedule = async (req, res, next) => {
@@ -303,6 +304,41 @@ export const getMyAllShifts = async (req, res, next) => {
       guardThroughWhere.status = "pending";
     }
 
+     /**
+     * 📊 TOTAL COUNT (ALL SHIFTS – NO FILTER)
+     */
+    const totalAllCount = await Static.count({
+      include: [
+        {
+          model: User,
+          as: "guards",
+          where: { id: guardId },
+          through: { attributes: [] },
+          required: true,
+        },
+      ],
+    });
+
+    /**
+     * 📊 FILTERED COUNT
+     */
+    const filteredCount = await Static.count({
+      where: shiftWhere,
+      include: [
+        {
+          model: User,
+          as: "guards",
+          where: { id: guardId },
+          through: {
+            where: guardThroughWhere,
+            attributes: [],
+          },
+          required: true,
+        },
+      ],
+    });
+
+
     // "all" → no extra conditions
 
     const { count, rows: shifts } = await Static.findAndCountAll({
@@ -376,6 +412,10 @@ export const getMyAllShifts = async (req, res, next) => {
       success: true,
       message: "Shifts fetched successfully",
       filter,
+      counts: {
+        all: totalAllCount,
+        filtered: filteredCount,
+      },
       data: response,
       pagination: {
         total: count,
@@ -983,10 +1023,38 @@ if (activeShift) {
     }
 
     // 🚫 Too late (missed completely)
-    if (now > oneHourAfterEnd) {
+    if (now > shiftEnd) {
+      assignment.status = "absent";
+      await assignment.save();
+
+      await shift.update({ status: "absent" });
+
+      // 🔔 Optional notification hook
+      await notifyGuardAndAdmin({
+        guardId,
+        shiftId: shift.id,
+        status: "ABSENT_NO_CLOCK_IN",
+        type: "CLOCK_IN",
+        guardMessage: `You missed clocking in for shift ${formatDate(
+          shiftStart
+        )}. Please inform your supervisor.`,
+        adminMessage: `Guard marked absent (missed clock-in) for shift on ${formatDate(
+          shiftStart
+        )}.`,
+      });
+
       return res.status(400).json({
         success: false,
-        message: "Shift time already completed. Clock-in not allowed.",
+        message:
+          "Shift timing is already completed. You are marked absent.",
+        data: {
+          shiftId: shift.id,
+          shiftDate: formatDate(shiftStart),
+          startTime: formatTime(shiftStart),
+          endTime: formatTime(shiftEnd),
+          attemptedAt: formatTime(now),
+          status: "absent",
+        },
       });
     }
 
@@ -1040,16 +1108,47 @@ if (now > shiftEnd && now <= oneHourAfterEnd) {
     }
 
     // ✅ CLOCK-IN
-    assignment.clockInTime = now;
-    assignment.status = "ongoing";
-    await assignment.save();
+assignment.clockInTime = now;
+assignment.status = "ongoing";
+await assignment.save();
 
-    // ✅ Update shift status
-    await shift.update({ status: "ongoing" });
+// ✅ Update shift status
+await shift.update({ status: "ongoing" });
+
+// 🔔 Notifications
+const guard = await User.findByPk(guardId, {
+  attributes: ["id", "name"],
+});
+
+// ⏱️ Late or on-time logic
+if (now > shiftStart) {
+  const lateMinutes = Math.floor(
+    (now.getTime() - shiftStart.getTime()) / (1000 * 60)
+  );
+
+  await notifyGuardAndAdmin({
+    guardId,
+    shiftId: staticId,
+    status: "CLOCK_IN_LATE",
+    type: "CLOCK_IN",
+    guardMessage: `You clocked in late by ${lateMinutes} minutes.`,
+    adminMessage: `Guard ${guard?.name || "Guard"} clocked in late by ${lateMinutes} minutes.`,
+  });
+} else {
+  await notifyGuardAndAdmin({
+    guardId,
+    shiftId: staticId,
+    status: "CLOCK_IN_SUCCESS",
+    type: "CLOCK_IN",
+    guardMessage: `You clocked in successfully at ${formatTime(now)}.`,
+    adminMessage: `Guard ${guard?.name || "Guard"} clocked in successfully at ${formatTime(now)}.`,
+  });
+}
+
 
     return res.status(200).json({
       success: true,
-      message: "Clock-In successful",
+      message: `Clock-In successful at ${formatTime(now)}`,
       warnings,
       data: {
         shiftId: staticId,
@@ -1155,6 +1254,28 @@ export const clockOut = async (req, res, next) => {
     await assignment.save();
 
     await shift.update({ status: shiftStatus });
+
+    if (assignmentStatus === "ended_early") {
+  await notifyGuardAndAdmin({
+    guardId,
+    shiftId: staticId,
+    status: "ended_early",
+    guardMessage: "You clocked out early. Shift marked as ended early.",
+    adminMessage: "Guard clocked out early. Shift marked as ended early.",
+    type: "CLOCK_OUT",
+  });
+} else {
+  // ✅ Normal completion
+  await notifyGuardAndAdmin({
+    guardId,
+    shiftId: staticId,
+    status: "completed",
+    guardMessage: "You have successfully clocked out. Shift completed.",
+    adminMessage: "Guard clocked out successfully. Shift completed.",
+    type: "CLOCK_OUT",
+  });
+}
+
 
     return res.status(200).json({
       success: true,
@@ -1401,6 +1522,7 @@ const overtimeHours = pivot?.overtimeHours || null;
         date: startLocal.format("YYYY-MM-DD"),
         type: shift.type,
         status: shift.status,
+        description: shift.description,
 
         order: {
           locationName: shift.order?.locationName || null,
@@ -1546,6 +1668,16 @@ export const startOvertime = async (req, res) => {
 
     await shift.update({ status: "overtime_started" });
 
+    // 🔔 NOTIFICATIONS
+    await notifyGuardAndAdmin({
+      guardId,
+      shiftId: staticId,
+      status: "overtime_started",
+      type: "OVERTIME_STARTED",
+      guardMessage: `Overtime started successfully at ${now.toLocaleTimeString()}.`,
+      adminMessage: `Guard ${guardId} started overtime at ${now.toLocaleTimeString()}.`,
+    });
+
     return res.status(200).json({
       success: true,
       message: "Overtime started successfully",
@@ -1652,6 +1784,18 @@ export const endOvertime = async (req, res) => {
     await assignment.save();
 
     await shift.update({ status: "overtime_ended" });
+
+    // 🔔 NOTIFICATIONS (GUARD + ADMIN)
+    await notifyGuardAndAdmin({
+      guardId,
+      shiftId: staticId,
+      status: "overtime_ended",
+      type: "OVERTIME_ENDED",
+      guardMessage: `Your overtime ended successfully at ${now.toLocaleTimeString()}.`,
+      adminMessage: `Guard ${
+        assignment.guard?.name || "Guard"
+      } ended overtime at ${now.toLocaleTimeString()} (OT: ${overtimeDurationHours} hrs).`,
+    });
 
     return res.status(200).json({
       success: true,

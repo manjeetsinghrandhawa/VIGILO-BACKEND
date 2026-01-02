@@ -158,6 +158,31 @@ cron.schedule("*/10 * * * *", async () => {
   });
 }
 
+/**
+ * 🔔 CASE 2.5: Forgot to Clock-Out (Notify after 5 minutes)
+ * - Shift ongoing
+ * - No clock-out
+ * - Exactly after 5 minutes window
+ */
+if (
+  shift.status === "ongoing" &&
+  assignment.status === "ongoing" &&
+  shiftEnd &&
+  !assignment.clockOutTime
+) {
+  const notifyAfter = shiftEnd.clone().add(5, "minutes");
+  const notifyUntil = shiftEnd.clone().add(6, "minutes"); // 1-min window
+
+  if (now.isSameOrAfter(notifyAfter) && now.isBefore(notifyUntil)) {
+    await notifyGuardAndAdmin({
+      guardId: guard.id,
+      shiftId: shift.id,
+      status: "clockout_reminder",
+      notifyAdmin: false, // 👈 guard only
+      guardMessage: `You have not clocked out of the shift (${shift.id}). Please clock out immediately.`,
+    });
+  }
+}
 
         /**
          * 🔴 CASE 3: Ongoing → no clock-out after end + 10 mins
@@ -202,7 +227,6 @@ cron.schedule("*/10 * * * *", async () => {
     });
   }
 }
-
       }
     }
   } catch (error) {
