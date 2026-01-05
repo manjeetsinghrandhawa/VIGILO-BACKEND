@@ -2,7 +2,6 @@ import Notification from "./notifications.model.js";
 
 export const getMyNotifications = async (req, res) => {
   try {
-    // ✅ SAME PATTERN AS getProfile
     const userId = req.userId;
 
     if (!userId) {
@@ -12,14 +11,53 @@ export const getMyNotifications = async (req, res) => {
       });
     }
 
-    // 🔹 Pagination params
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 10;
+    // 🔹 Pagination
+    let { page = 1, limit = 10 } = req.query;
+    const { filter = "all" } = req.body;
+
+    page = parseInt(page);
+    limit = parseInt(limit);
+
+    if (page < 1) page = 1;
+    if (limit < 1) limit = 10;
+
     const offset = (page - 1) * limit;
 
-    const { rows: notifications, count: total } =
-      await Notification.findAndCountAll({
+    /**
+     * 🔥 FILTER LOGIC
+     */
+    let whereClause = { userId };
+
+    if (filter === "unread") {
+      whereClause.isRead = false;
+    }
+
+    if (filter === "newRequests") {
+      whereClause.type = "newRequest"; 
+      // 👆 change this if your field/value differs
+    }
+
+    /**
+     * 📊 TOTAL COUNTS (FOR UI TABS)
+     */
+    const [allCount, unreadCount, newRequestsCount] = await Promise.all([
+      Notification.count({
         where: { userId },
+      }),
+      Notification.count({
+        where: { userId, isRead: false },
+      }),
+      Notification.count({
+        where: { userId, type: "newRequest" },
+      }),
+    ]);
+
+    /**
+     * 📥 FETCH NOTIFICATIONS
+     */
+    const { rows: notifications, count } =
+      await Notification.findAndCountAll({
+        where: whereClause,
         order: [["createdAt", "DESC"]],
         limit,
         offset,
@@ -27,13 +65,18 @@ export const getMyNotifications = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      filter,
+      counts: {
+        all: allCount,
+        unread: unreadCount,
+        newRequests: newRequestsCount,
+      },
       pagination: {
-        total,
+        total: count,
         page,
         limit,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(count / limit),
       },
-      count: notifications.length,
       data: notifications,
     });
   } catch (error) {
