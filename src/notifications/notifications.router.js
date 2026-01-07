@@ -4,6 +4,6 @@ import { getMyNotifications } from "./notifications.controller.js";
 
 const router = express.Router();
 // Fetch notifications for the authenticated user
-router.get("/getMyNotifications", auth,  getMyNotifications);
+router.get("/getMyNotifications", auth, getMyNotifications);
 
 export default router;

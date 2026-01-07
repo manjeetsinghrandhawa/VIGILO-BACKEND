@@ -13,7 +13,7 @@ export const getMyNotifications = async (req, res) => {
 
     // 🔹 Pagination
     let { page = 1, limit = 10 } = req.query;
-    const { filter = "all" } = req.body;
+    const { filter = "all" } = req.body || {};
 
     page = parseInt(page);
     limit = parseInt(limit);
