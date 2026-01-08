@@ -102,6 +102,22 @@ export const editIncident = catchAsyncError(async (req, res, next) => {
   });
 });
 
+export const deleteIncident = catchAsyncError(async (req, res, next) => {
+  const { id } = req.params;
+  const incident = await Incident.findByPk(id);
+
+  if (!incident) {
+    return next(new ErrorHandler("Incident not found", StatusCodes.NOT_FOUND));
+  }
+
+  await incident.destroy();
+
+  res.status(StatusCodes.OK).json({
+    success: true,
+    message: "Incident deleted successfully",
+  });
+});
+
 export const getIncidentById = catchAsyncError(async (req, res, next) => {
   const { id } = req.params;
 
