@@ -328,3 +328,89 @@ export const getAdminOrderById = catchAsyncError(async (req, res, next) => {
     data: order,
   });
 });
+
+export const editOrder = catchAsyncError(async (req, res, next) => {
+  const { id } = req.params;
+  
+  // Find the order
+  const order = await Order.findByPk(id);
+  if (!order) {
+    return next(new ErrorHandler("Order not found", StatusCodes.NOT_FOUND));
+  }
+
+  // Prevent editing completed or cancelled orders
+  // if (["completed", "cancelled"].includes(order.status)) {
+  //   return next(
+  //     new ErrorHandler(
+  //       "Cannot edit completed or cancelled orders", 
+  //       StatusCodes.BAD_REQUEST
+  //     )
+  //   );
+  // }
+
+  const {
+    serviceType,
+    locationName,
+    locationAddress,
+    siteService,
+    guardsRequired,
+    description,
+    startDate,
+    endDate,
+    startTime,
+    endTime,
+    images
+  } = req.body;
+
+  // Build update object with only provided fields
+  const updateData = {};
+  
+  if (serviceType !== undefined) updateData.serviceType = serviceType;
+  if (locationName !== undefined) updateData.locationName = locationName;
+  if (locationAddress !== undefined) updateData.locationAddress = locationAddress;
+  if (guardsRequired !== undefined) updateData.guardsRequired = guardsRequired;
+  if (description !== undefined) updateData.description = description;
+  if (startTime !== undefined) updateData.startTime = startTime;
+  if (endTime !== undefined) updateData.endTime = endTime;
+  if (images !== undefined) updateData.images = images;
+
+  // Handle date conversions
+  if (startDate) {
+    updateData.startDate = toUTC(startDate);
+  }
+  if (endDate) {
+    updateData.endDate = toUTC(endDate);
+  }
+
+  // Handle siteService geometry update
+  if (siteService) {
+    if (
+      typeof siteService !== "object" ||
+      typeof siteService.lat !== "number" ||
+      typeof siteService.lng !== "number"
+    ) {
+      return next(
+        new ErrorHandler(
+          "Invalid siteService format — must include lat and lng as numbers",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+    
+    updateData.siteService = sequelize.literal(
+      `ST_GeomFromText('POINT(${siteService.lng} ${siteService.lat})', 4326)`
+    );
+  }
+
+  // Update the order
+  await order.update(updateData);
+
+  // Fetch fresh data to return
+  const updatedOrder = await Order.findByPk(id);
+
+  res.status(StatusCodes.OK).json({
+    success: true,
+    message: "Order updated successfully",
+    data: updatedOrder
+  });
+});
