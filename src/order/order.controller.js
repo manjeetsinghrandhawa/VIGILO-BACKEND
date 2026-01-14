@@ -339,14 +339,14 @@ export const editOrder = catchAsyncError(async (req, res, next) => {
   }
 
   // Prevent editing completed or cancelled orders
-  // if (["completed", "cancelled"].includes(order.status)) {
-  //   return next(
-  //     new ErrorHandler(
-  //       "Cannot edit completed or cancelled orders", 
-  //       StatusCodes.BAD_REQUEST
-  //     )
-  //   );
-  // }
+  if (["completed", "cancelled"].includes(order.status)) {
+    return next(
+      new ErrorHandler(
+        "Cannot edit completed or cancelled orders", 
+        StatusCodes.BAD_REQUEST
+      )
+    );
+  }
 
   const {
     serviceType,
