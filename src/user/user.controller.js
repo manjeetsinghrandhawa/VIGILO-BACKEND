@@ -666,26 +666,108 @@ export const getGuardById = catchAsyncError(async (req, res, next) => {
   });
 });
 
-//fetch all clients details 
+// Fetch all clients details 
 export const getAllClients = catchAsyncError(async (req, res, next) => {
-
-  //  Find the Clients
-  const user = await userModel.findAll({
-    where: {  role: "user" },
-    attributes: ["id", "name", "email", "mobile", "address"],
+  // Find the Clients
+  const users = await userModel.findAll({
+    where: { role: "user" },
+    attributes: ["id", "name", "email", "mobile", "address", "avatar"], // ← ADD AVATAR
+    order: [["createdAt", "DESC"]],
   });
 
-  if (!user) {
+  if (!users || users.length === 0) {
+    return next(new ErrorHandler("No clients found", StatusCodes.NOT_FOUND));
+  }
+
+  // Response
+  res.status(StatusCodes.OK).json({
+    success: true,
+    message: "Clients fetched successfully",
+    data: users,
+  });
+});
+
+
+// Get single client details by ID
+export const getClientById = catchAsyncError(async (req, res, next) => {
+  const { id } = req.params;
+
+  const client = await userModel.findOne({
+    where: { 
+      id,
+      role: "user" 
+    },
+    attributes: [
+      "id", 
+      "name", 
+      "email", 
+      "mobile", 
+      "countryCode",
+      "address", 
+      "avatar",
+      "isVerified",
+      "createdAt",
+      "updatedAt"
+    ],
+  });
+
+  if (!client) {
     return next(new ErrorHandler("Client not found", StatusCodes.NOT_FOUND));
   }
 
-  //  Response
   res.status(StatusCodes.OK).json({
     success: true,
-    message: "Client Details fetched successfully",
-    data: user
+    message: "Client details fetched successfully",
+    data: client,
   });
 });
+
+// Edit/Update client details
+export const editClient = catchAsyncError(async (req, res, next) => {
+  const { id } = req.params;
+  const { name, email, mobile, countryCode, address, avatar } = req.body;
+
+  // Find the client
+  const client = await userModel.findOne({
+    where: { 
+      id,
+      role: "user" 
+    },
+  });
+
+  if (!client) {
+    return next(new ErrorHandler("Client not found", StatusCodes.NOT_FOUND));
+  }
+
+  // Check if email is being changed and if it's already taken
+  if (email && email !== client.email) {
+    const emailExists = await userModel.findOne({
+      where: { email },
+    });
+    
+    if (emailExists) {
+      return next(new ErrorHandler("Email already in use", StatusCodes.BAD_REQUEST));
+    }
+  }
+
+  // Update client details
+  const updateData = {};
+  if (name) updateData.name = name;
+  if (email) updateData.email = email;
+  if (mobile) updateData.mobile = mobile;
+  if (countryCode !== undefined) updateData.countryCode = countryCode;
+  if (address) updateData.address = address;
+  if (avatar !== undefined) updateData.avatar = avatar;
+
+  await client.update(updateData);
+
+  res.status(StatusCodes.OK).json({
+    success: true,
+    message: "Client updated successfully",
+    data: client,
+  });
+});
+
 
 //to delete a client
 export const deleteClient = catchAsyncError(async (req, res, next) => {
@@ -712,3 +794,4 @@ export const deleteClient = catchAsyncError(async (req, res, next) => {
     message: "Client deleted successfully",
   });
 });
+
