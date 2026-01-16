@@ -2,6 +2,7 @@ import express from "express";
 import {
   createSchedule,
   editSchedule,
+  getTimeSheets,
   getAllSchedules,
   getMyAllShifts,
   // getMySchedules,
@@ -28,6 +29,9 @@ router.post("/createSchedule",auth,isAdmin, createSchedule);
 
 //Edit a schedule by ID
 router.put("/editSchedule/:id",auth,isAdmin,editSchedule );
+
+//timesheet
+router.get("/getTimeSheets",auth, getTimeSheets);
 
 //For fetching weekly schedules with guard and site details
 router.get("/getAllSchedules",auth,isAdmin, getAllSchedules);

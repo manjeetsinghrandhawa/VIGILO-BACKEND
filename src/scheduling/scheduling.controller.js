@@ -12,6 +12,8 @@ import ErrorHandler from "../../utils/errorHandler.js";
 import Incident from "../incident/incident.model.js";
 import Notification from "../notifications/notifications.model.js";
 import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
+import userModel from "../user/user.model.js";
+
 
 
 export const createSchedule = async (req, res, next) => {
@@ -2320,6 +2322,153 @@ export const requestChangeStaticShift = async (req, res) => {
     });
   }
 };
+
+export const getTimeSheets = async (req, res) => {
+  try {
+    const { guardId, fromDate, toDate } = req.query;
+    const userId = req.userId; // ✅ always exists after auth
+
+    // 🔐 FETCH USER ROLE SAFELY
+    const loggedInUser = await userModel.findByPk(userId, {
+      attributes: ["id", "role"],
+    });
+
+    if (!loggedInUser) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    const role = loggedInUser.role;
+    const tz = getTimeZone();
+
+    /**
+     * 🔍 WHERE CONDITIONS
+     */
+    const where = {};
+
+    // 👮 Guard → only his own shifts
+    if (role === "guard") {
+      where.guardId = userId;
+    }
+
+    // 🧑‍💼 Admin → optional guard filter
+    if (role === "admin" && guardId) {
+      where.guardId = guardId;
+    }
+
+    /**
+     * 📅 DATE FILTER
+     */
+    if (fromDate && toDate) {
+      where["$static.startTime$"] = {
+        [Op.between]: [
+          moment.tz(fromDate, tz).startOf("day").utc().toDate(),
+          moment.tz(toDate, tz).endOf("day").utc().toDate(),
+        ],
+      };
+    }
+
+    /**
+     * 📦 FETCH DATA
+     */
+    const records = await StaticGuards.findAll({
+      where,
+      include: [
+  {
+    model: Static,
+    as: "static",
+    required: true, // 🔥 VERY IMPORTANT
+    attributes: [
+      "id",
+      "orderId",
+      "type",
+      "status",
+      "description",
+      "startTime",
+      "endTime",
+    ],
+  },
+  {
+    model: User,
+    as: "guard",
+    attributes: ["id", "name", "email"],
+  },
+],
+
+      order: [[{ model: Static, as: "static" }, "startTime", "DESC"]],
+    });
+
+    /**
+     * 🧾 FORMAT RESPONSE
+     */
+    const data = records
+  .filter(row => row.static) // 🛡️ extra safety
+  .map((row) => {
+    const shiftStart = moment.utc(row.static.startTime).tz(tz);
+    const shiftEnd = moment.utc(row.static.endTime).tz(tz);
+
+    return {
+      shiftId: row.static.id,
+      orderId: row.static.orderId,
+
+      date: shiftStart.format("DD MMM YYYY"),
+
+      shiftStartTime: shiftStart.format("hh:mm A"),
+      shiftEndTime: shiftEnd.format("hh:mm A"),
+
+      clockInTime: row.clockInTime
+        ? moment.utc(row.clockInTime).tz(tz).format("hh:mm A")
+        : null,
+
+      clockOutTime: row.clockOutTime
+        ? moment.utc(row.clockOutTime).tz(tz).format("hh:mm A")
+        : null,
+
+      totalHours: row.totalHours ?? 0,
+
+      shiftStatus: row.static.status,
+      guardShiftStatus: row.status,
+
+      overtimeStartTime: row.overtimeStartTime
+        ? moment.utc(row.overtimeStartTime).tz(tz).format("hh:mm A")
+        : null,
+
+      overtimeEndTime: row.overtimeEndTime
+        ? moment.utc(row.overtimeEndTime).tz(tz).format("hh:mm A")
+        : null,
+
+      overtimeHours: row.overtimeHours ?? 0,
+
+      requestOffStatus: row.requestOffStatus,
+      changeShiftStatus: row.changeShiftStatus,
+
+      description: row.static.description,
+
+      guard: {
+        id: row.guard.id,
+        name: row.guard.name,
+        email: row.guard.email,
+      },
+    };
+  });
+
+
+    return res.status(200).json({
+      success: true,
+      count: data.length,
+      data,
+    });
+  } catch (error) {
+    console.error("Timesheet Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+};
+
 
 
 
