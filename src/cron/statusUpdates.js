@@ -17,7 +17,7 @@ const updateOrderStatuses = async () => {
     const orders = await Order.findAll({
       where: {
         status: {
-          [Op.in]: ["pending", "upcoming"],
+          [Op.in]: ["pending", "upcoming", "ongoing"],
         },
       },
     });
@@ -31,7 +31,7 @@ const updateOrderStatuses = async () => {
 
     for (const order of orders) {
       /**
-       * 🕒 Build full order start datetime
+       * 🕒 Build full START datetime
        */
       const orderStartDateTime = moment
         .utc(order.startDate)
@@ -42,10 +42,22 @@ const updateOrderStatuses = async () => {
           second: 0,
         });
 
+      /**
+       * 🕒 Build full END datetime
+       */
+      const orderEndDateTime = moment
+        .utc(order.endDate ?? order.startDate)
+        .tz(tz)
+        .set({
+          hour: moment(order.endTime, "HH:mm").hour(),
+          minute: moment(order.endTime, "HH:mm").minute(),
+          second: 0,
+        });
+
       let newStatus = null;
 
       /**
-       * 🔴 CASE 1: Pending → Missed
+       * 🔴 CASE 1: pending → missed
        */
       if (
         order.status === "pending" &&
@@ -55,13 +67,23 @@ const updateOrderStatuses = async () => {
       }
 
       /**
-       * 🟢 CASE 2: Upcoming → Ongoing
+       * 🟢 CASE 2: upcoming → ongoing
        */
-      if (
+      else if (
         order.status === "upcoming" &&
-        now.isAfter(orderStartDateTime)
+        now.isSameOrAfter(orderStartDateTime)
       ) {
         newStatus = "ongoing";
+      }
+
+      /**
+       * 🔵 CASE 3: ongoing → completed
+       */
+      else if (
+        order.status === "ongoing" &&
+        now.isSameOrAfter(orderEndDateTime)
+      ) {
+        newStatus = "completed";
       }
 
       if (newStatus && newStatus !== order.status) {
@@ -77,6 +99,7 @@ const updateOrderStatuses = async () => {
     console.error("ORDER STATUS CRON ERROR:", error);
   }
 };
+
 
 
 // ✅ Schedule the cron job at 00:01 every day (India time)
