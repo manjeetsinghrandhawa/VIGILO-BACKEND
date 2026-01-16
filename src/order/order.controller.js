@@ -187,39 +187,62 @@ export const cancelOrder = catchAsyncError(async (req, res, next) => {
 
 export const acceptOrder = catchAsyncError(async (req, res, next) => {
   const { id } = req.params;
+
   const order = await Order.findByPk(id);
 
   if (!order) {
-    return next(new ErrorHandler("Order not found", StatusCodes.NOT_FOUND));
+    return next(
+      new ErrorHandler("Order not found", StatusCodes.NOT_FOUND)
+    );
   }
 
   if (order.status !== "pending") {
     return next(
-      new ErrorHandler("Only pending orders can be accepted", StatusCodes.BAD_REQUEST)
+      new ErrorHandler(
+        "Only pending orders can be accepted",
+        StatusCodes.BAD_REQUEST
+      )
     );
   }
 
   const tz = getTimeZone();
   const now = moment().tz(tz);
-  const start = moment.utc(order.startDate).tz(tz);
-  const end = order.endDate ? moment.utc(order.endDate).tz(tz) : null;
 
-  let newStatus;
+  /**
+   * 🕒 Build full order start datetime
+   */
+  const orderStartDateTime = moment
+    .utc(order.startDate)
+    .tz(tz)
+    .set({
+      hour: moment(order.startTime, "HH:mm").hour(),
+      minute: moment(order.startTime, "HH:mm").minute(),
+      second: 0,
+    });
 
-  if (now.isBefore(start)) {
-    newStatus = "upcoming";
-  } else if (end && now.isSameOrAfter(end)) {
-    newStatus = "completed";
-  } else {
-    newStatus = "ongoing";
+  /**
+   * 🔴 If order start time has already passed → MISSED
+   */
+  if (now.isAfter(orderStartDateTime)) {
+    order.status = "missed";
+    await order.save();
+
+    return res.status(StatusCodes.BAD_REQUEST).json({
+      success: false,
+      message: "Order start time has passed. Order marked as missed.",
+      data: order,
+    });
   }
 
-  order.status = newStatus;
+  /**
+   * 🟢 Accept order → UPCOMING
+   */
+  order.status = "upcoming";
   await order.save();
 
   res.status(StatusCodes.OK).json({
     success: true,
-    message: `Order accepted successfully — status set to "${newStatus}".`,
+    message: 'Order accepted successfully — status set to "upcoming".',
     data: order,
   });
 });

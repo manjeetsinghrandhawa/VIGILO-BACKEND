@@ -10,53 +10,74 @@ import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
 
 
 const updateOrderStatuses = async () => {
-  const tz = getTimeZone(); 
+  const tz = getTimeZone();
   const now = moment().tz(tz);
 
   try {
     const orders = await Order.findAll({
       where: {
         status: {
-          [Op.notIn]: ["completed", "cancelled", "pending"],
+          [Op.in]: ["pending", "upcoming"],
         },
       },
     });
 
     if (!orders.length) {
-      console.log("No orders found for status update.");
+      console.log("No orders found for order status update.");
       return;
     }
 
     let updatedCount = 0;
 
     for (const order of orders) {
-      // ✅ Convert UTC → Local before comparisons
-      const startDate = moment.utc(order.startDate).tz(tz).startOf("day");
-      const endDate = order.endDate
-        ? moment.utc(order.endDate).tz(tz).endOf("day")
-        : null;
+      /**
+       * 🕒 Build full order start datetime
+       */
+      const orderStartDateTime = moment
+        .utc(order.startDate)
+        .tz(tz)
+        .set({
+          hour: moment(order.startTime, "HH:mm").hour(),
+          minute: moment(order.startTime, "HH:mm").minute(),
+          second: 0,
+        });
 
-      let newStatus = order.status;
+      let newStatus = null;
 
-      if (now.isBefore(startDate)) {
-        newStatus = "upcoming";
-      } else if (!endDate || now.isBefore(endDate)) {
-        newStatus = "ongoing";
-      } else if (now.isSameOrAfter(endDate)) {
-        newStatus = "completed";
+      /**
+       * 🔴 CASE 1: Pending → Missed
+       */
+      if (
+        order.status === "pending" &&
+        now.isAfter(orderStartDateTime)
+      ) {
+        newStatus = "missed";
       }
 
-      if (newStatus !== order.status) {
+      /**
+       * 🟢 CASE 2: Upcoming → Ongoing
+       */
+      if (
+        order.status === "upcoming" &&
+        now.isAfter(orderStartDateTime)
+      ) {
+        newStatus = "ongoing";
+      }
+
+      if (newStatus && newStatus !== order.status) {
         await order.update({ status: newStatus });
         updatedCount++;
       }
     }
 
-    console.log(`Order statuses updated successfully. Updated: ${updatedCount}`);
+    console.log(
+      `Order status cron completed. Orders updated: ${updatedCount}`
+    );
   } catch (error) {
-    console.error("Error updating order statuses:", error.message);
+    console.error("ORDER STATUS CRON ERROR:", error);
   }
 };
+
 
 // ✅ Schedule the cron job at 00:01 every day (India time)
 cron.schedule(
