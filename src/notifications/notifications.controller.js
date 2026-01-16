@@ -87,3 +87,53 @@ export const getMyNotifications = async (req, res) => {
     });
   }
 };
+
+
+export const deleteAllNotifications = async (req, res) => {
+  try {
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    const { filter = "all" } = req.body || {};
+
+    /**
+     * 🔥 FILTER LOGIC (same as getMyNotifications)
+     */
+    let whereClause = { userId };
+
+    if (filter === "unread") {
+      whereClause.isRead = false;
+    }
+
+    if (filter === "newRequests") {
+      whereClause.type = "newRequest"; 
+      // adjust if your type value differs
+    }
+
+    /**
+     * 🗑️ DELETE
+     */
+    const deletedCount = await Notification.destroy({
+      where: whereClause,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Notifications deleted successfully`,
+      filter,
+      deletedCount,
+    });
+  } catch (error) {
+    console.error("DELETE ALL NOTIFICATIONS ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete notifications",
+    });
+  }
+};

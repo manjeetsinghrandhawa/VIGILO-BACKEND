@@ -16,52 +16,81 @@ import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
 
 export const createSchedule = async (req, res, next) => {
   try {
-    const { description, startTime, endTime, date, guardIds, orderId } = req.body;
+    const {
+      description,
+      startTime,
+      endTime,
+      date,
+      endDate,   // ✅ NEW FIELD
+      guardIds,
+      orderId,
+    } = req.body;
+
     console.log("Incoming Create Schedule Body:", req.body);
 
-
-    // Validate input
+    // 🔒 Validations
     if (!orderId) {
-      return next(new ErrorHandler("Order ID is required", StatusCodes.BAD_REQUEST));
+      return next(
+        new ErrorHandler("Order ID is required", StatusCodes.BAD_REQUEST)
+      );
     }
 
     if (!startTime || !endTime) {
-      return next(new ErrorHandler("Start time and end time are required", StatusCodes.BAD_REQUEST));
+      return next(
+        new ErrorHandler("Start time and end time are required", StatusCodes.BAD_REQUEST)
+      );
     }
 
     if (!Array.isArray(guardIds) || guardIds.length === 0) {
-      return next(new ErrorHandler("At least one guard must be assigned", StatusCodes.BAD_REQUEST));
+      return next(
+        new ErrorHandler("At least one guard must be assigned", StatusCodes.BAD_REQUEST)
+      );
     }
 
-    // Check if order exists
+    // 🔎 Order check
     const order = await Order.findByPk(orderId);
     if (!order) {
       return next(new ErrorHandler("Order not found", StatusCodes.NOT_FOUND));
     }
 
-    // Validate guards
+    // 🔎 Guard validation
     const guards = await User.findAll({ where: { id: guardIds } });
     if (guards.length !== guardIds.length) {
-      return next(new ErrorHandler("One or more guard IDs are invalid", StatusCodes.BAD_REQUEST));
+      return next(
+        new ErrorHandler("One or more guard IDs are invalid", StatusCodes.BAD_REQUEST)
+      );
     }
 
     const tz = getTimeZone();
 
-// Normalize date
-const normalizedDate = date
-  ? moment(date).format("YYYY-MM-DD")
-  : null;
+    /**
+     * 🕒 DATE NORMALIZATION
+     */
+    const normalizedStartDate = date
+      ? moment(date).format("YYYY-MM-DD")
+      : null;
 
-const start = normalizedDate
-  ? moment.tz(`${normalizedDate} ${startTime}`, "YYYY-MM-DD HH:mm", tz).utc().toDate()
-  : moment.tz(startTime, tz).utc().toDate();
+    const normalizedEndDate = endDate
+      ? moment(endDate).format("YYYY-MM-DD")
+      : normalizedStartDate; // fallback to start date if not provided
 
-const end = normalizedDate
-  ? moment.tz(`${normalizedDate} ${endTime}`, "YYYY-MM-DD HH:mm", tz).utc().toDate()
-  : moment.tz(endTime, tz).utc().toDate();
+    const start = normalizedStartDate
+      ? moment
+          .tz(`${normalizedStartDate} ${startTime}`, "YYYY-MM-DD HH:mm", tz)
+          .utc()
+          .toDate()
+      : moment.tz(startTime, tz).utc().toDate();
 
+    const end = normalizedEndDate
+      ? moment
+          .tz(`${normalizedEndDate} ${endTime}`, "YYYY-MM-DD HH:mm", tz)
+          .utc()
+          .toDate()
+      : moment.tz(endTime, tz).utc().toDate();
 
-    // Create Static (shift)
+    /**
+     * 🏗️ CREATE SHIFT
+     */
     const staticShift = await Static.create({
       orderId,
       description,
@@ -71,23 +100,27 @@ const end = normalizedDate
       status: "pending",
     });
 
-    // Assign guards (create StaticGuards records)
+    /**
+     * 👮 ASSIGN GUARDS
+     */
     const guardAssignments = guardIds.map((guardId) => ({
       staticId: staticShift.id,
       guardId,
       status: "pending",
     }));
 
-    // Use try/catch around the pivot creation so we can clean up the staticShift if it fails
     try {
       await StaticGuards.bulkCreate(guardAssignments);
     } catch (pivotErr) {
-      // rollback staticShift if pivot failed (optional but recommended)
       await staticShift.destroy().catch(() => {});
-      return next(new ErrorHandler("Failed to assign guards", StatusCodes.INTERNAL_SERVER_ERROR));
+      return next(
+        new ErrorHandler("Failed to assign guards", StatusCodes.INTERNAL_SERVER_ERROR)
+      );
     }
 
-    // Fetch full static with guards
+    /**
+     * 📦 FETCH CREATED SHIFT
+     */
     const createdShift = await Static.findByPk(staticShift.id, {
       include: [
         {
@@ -99,24 +132,28 @@ const end = normalizedDate
       ],
     });
 
-    // 🔔 Create notifications for assigned guards
-const notificationsPayload = guardIds.map((guardId) => ({
-  userId: guardId,
-  role: "guard",
-  title: "New Shift Assigned",
-  message: `A new shift has been assigned to you on ${normalizedDate || "scheduled date"} from ${startTime} to ${endTime}.`,
-  type: "SHIFT_ASSIGNED",
-  data: {
-    shiftId: staticShift.id,
-    orderId,
-    startTime,
-    endTime,
-    date: normalizedDate,
-  },
-}));
+    /**
+     * 🔔 NOTIFICATIONS
+     */
+    const notificationsPayload = guardIds.map((guardId) => ({
+      userId: guardId,
+      role: "guard",
+      title: "New Shift Assigned",
+      message: `A new shift has been assigned to you from ${startTime} to ${endTime} on ${normalizedStartDate}${
+        endDate ? ` till ${normalizedEndDate}` : ""
+      }.`,
+      type: "SHIFT_ASSIGNED",
+      data: {
+        shiftId: staticShift.id,
+        orderId,
+        startTime,
+        endTime,
+        startDate: normalizedStartDate,
+        endDate: normalizedEndDate,
+      },
+    }));
 
-await Notification.bulkCreate(notificationsPayload);
-
+    await Notification.bulkCreate(notificationsPayload);
 
     return res.status(StatusCodes.CREATED).json({
       success: true,
@@ -132,6 +169,7 @@ await Notification.bulkCreate(notificationsPayload);
     });
   }
 };
+
 
 export const getAllSchedules = async (req, res, next) => {
   try {
