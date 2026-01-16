@@ -1,6 +1,7 @@
 import express from "express";
 import {
   createSchedule,
+  editSchedule,
   getAllSchedules,
   getMyAllShifts,
   // getMySchedules,
@@ -24,6 +25,9 @@ const router = express.Router();
 /* ------------------------- CREATE ------------------------- */
 // Create a new scheduling entry when admin assigns a guard
 router.post("/createSchedule",auth,isAdmin, createSchedule);
+
+//Edit a schedule by ID
+router.put("/editSchedule/:id",auth,isAdmin,editSchedule );
 
 //For fetching weekly schedules with guard and site details
 router.get("/getAllSchedules",auth,isAdmin, getAllSchedules);

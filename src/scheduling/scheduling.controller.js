@@ -170,6 +170,141 @@ export const createSchedule = async (req, res, next) => {
   }
 };
 
+export const editSchedule = async (req, res, next) => {
+  try {
+    const { id } = req.params; // schedule ID
+
+    const {
+      description,
+      startTime,
+      endTime,
+      date,       // start date
+      endDate,    // end date
+      guardIds,
+    } = req.body;
+
+    // 🔎 Fetch existing schedule
+    const staticShift = await Static.findByPk(id);
+
+    if (!staticShift) {
+      return next(
+        new ErrorHandler("Schedule not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    const tz = getTimeZone();
+
+    /**
+     * 🕒 DATE NORMALIZATION
+     */
+    const normalizedStartDate = date
+      ? moment(date).format("YYYY-MM-DD")
+      : moment.utc(staticShift.startTime).tz(tz).format("YYYY-MM-DD");
+
+    const normalizedEndDate = endDate
+      ? moment(endDate).format("YYYY-MM-DD")
+      : moment.utc(staticShift.endTime).tz(tz).format("YYYY-MM-DD");
+
+    const start = startTime
+      ? moment
+          .tz(`${normalizedStartDate} ${startTime}`, "YYYY-MM-DD HH:mm", tz)
+          .utc()
+          .toDate()
+      : staticShift.startTime;
+
+    const end = endTime
+      ? moment
+          .tz(`${normalizedEndDate} ${endTime}`, "YYYY-MM-DD HH:mm", tz)
+          .utc()
+          .toDate()
+      : staticShift.endTime;
+
+    /**
+     * 🏗️ UPDATE SHIFT
+     */
+    await staticShift.update({
+      description: description ?? staticShift.description,
+      startTime: start,
+      endTime: end,
+    });
+
+    /**
+     * 👮 UPDATE GUARDS (if provided)
+     */
+    if (Array.isArray(guardIds)) {
+      // Validate guards
+      const guards = await User.findAll({ where: { id: guardIds } });
+      if (guards.length !== guardIds.length) {
+        return next(
+          new ErrorHandler("One or more guard IDs are invalid", StatusCodes.BAD_REQUEST)
+        );
+      }
+
+      // Remove old assignments
+      await StaticGuards.destroy({
+        where: { staticId: staticShift.id },
+      });
+
+      // Add new assignments
+      const guardAssignments = guardIds.map((guardId) => ({
+        staticId: staticShift.id,
+        guardId,
+        status: "pending",
+      }));
+
+      await StaticGuards.bulkCreate(guardAssignments);
+
+      /**
+       * 🔔 NOTIFICATIONS (Updated Shift)
+       */
+      const notificationsPayload = guardIds.map((guardId) => ({
+        userId: guardId,
+        role: "guard",
+        title: "Shift Updated",
+        message: `Your shift has been updated. Timing: ${startTime || "updated"} to ${endTime || "updated"} from ${normalizedStartDate} till ${normalizedEndDate}.`,
+        type: "SHIFT_UPDATED",
+        data: {
+          shiftId: staticShift.id,
+          startTime,
+          endTime,
+          startDate: normalizedStartDate,
+          endDate: normalizedEndDate,
+        },
+      }));
+
+      await Notification.bulkCreate(notificationsPayload);
+    }
+
+    /**
+     * 📦 FETCH UPDATED SHIFT
+     */
+    const updatedShift = await Static.findByPk(staticShift.id, {
+      include: [
+        {
+          model: User,
+          as: "guards",
+          attributes: ["id", "name", "email"],
+          through: { attributes: ["status", "createdAt"] },
+        },
+      ],
+    });
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Schedule updated successfully",
+      data: updatedShift,
+    });
+  } catch (error) {
+    console.error("EDIT SCHEDULE ERROR:", error.stack || error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+
 
 export const getAllSchedules = async (req, res, next) => {
   try {
