@@ -137,3 +137,51 @@ export const deleteAllNotifications = async (req, res) => {
     });
   }
 };
+
+export const deleteNotificationById = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { notificationId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    if (!notificationId) {
+      return res.status(400).json({
+        success: false,
+        message: "Notification ID is required",
+      });
+    }
+
+    const deletedCount = await Notification.destroy({
+      where: {
+        id: notificationId,
+        userId, // 🔐 security check
+      },
+    });
+
+    if (deletedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found or already deleted",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Notification deleted successfully",
+      notificationId,
+    });
+  } catch (error) {
+    console.error("DELETE NOTIFICATION ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete notification",
+    });
+  }
+};
+
