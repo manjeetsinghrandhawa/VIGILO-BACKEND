@@ -35,17 +35,7 @@ const Static = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true,
     },
-    /* 🆕 SHIFT START DATE */
-    date: {
-      type: DataTypes.DATEONLY,
-      allowNull: false,
-    },
-
-    /* 🆕 SHIFT END DATE */
-    endDate: {
-      type: DataTypes.DATEONLY,
-      allowNull: true, // nullable for same-day shifts
-    },
+  
     startTime: {
       type: DataTypes.DATE,
       allowNull: false,
