@@ -35,7 +35,16 @@ const Static = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true,
     },
-  
+    date: {
+  type: DataTypes.DATEONLY,
+  allowNull: false,
+},
+
+endDate: {
+  type: DataTypes.DATEONLY,
+  allowNull: true,
+},
+
     startTime: {
       type: DataTypes.DATE,
       allowNull: false,

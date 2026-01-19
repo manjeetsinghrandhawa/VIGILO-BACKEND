@@ -96,7 +96,9 @@ export const createSchedule = async (req, res, next) => {
     const staticShift = await Static.create({
       orderId,
       description,
-      
+      // ✅ SAVE DATES
+  date: normalizedStartDate,
+  endDate: normalizedEndDate,
       startTime: start,
       endTime: end,
       type: "static",
