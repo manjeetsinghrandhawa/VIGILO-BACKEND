@@ -91,7 +91,7 @@ export const createSchedule = async (req, res, next) => {
       : moment.tz(endTime, tz).utc().toDate();
 
     /**
-     * 🏗️ CREATE SHIFT
+     * 🏗️ CREATE SHIFT 21
      */
     const staticShift = await Static.create({
       orderId,
