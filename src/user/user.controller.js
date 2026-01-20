@@ -10,6 +10,8 @@ import { Op } from "sequelize";
 import Static from "../shift/static.model.js";
 import StaticGuards from "../shift/staticGuards.model.js";
 import Order from "../order/order.model.js";
+import sendEmail from "../../utils/sendEmail.js";
+import { generateGuardCreatedTemplate } from "../templete/generateGuardCreatedTemplate.js";
 
 // Register User
 // Register User
@@ -173,21 +175,34 @@ export const registerGaurd = catchAsyncError(async (req, res, next) => {
   });
 });
 
+const generateRandomPassword = (length = 10) => {
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$";
+  let password = "";
+  for (let i = 0; i < length; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+};
+
+
+
+
 
 export const createGuardByAdmin = catchAsyncError(async (req, res, next) => {
-  const { name, email, password, address, mobile, avatar } = req.body;
+  const { name, email, mobile } = req.body;
 
-  // Validate required fields
-  if (!name || !email || !password || !address) {
+  // 🔒 Validation
+  if (!name || !email || !mobile) {
     return next(
       new ErrorHandler(
-        "Name, email, password, and address are required fields.",
+        "Name, email, and mobile are required.",
         StatusCodes.BAD_REQUEST
       )
     );
   }
 
-  // Check if email already exists
+  // 🔍 Check existing user
   const existingUser = await userModel.findOne({ where: { email } });
   if (existingUser) {
     return next(
@@ -198,27 +213,44 @@ export const createGuardByAdmin = catchAsyncError(async (req, res, next) => {
     );
   }
 
-  // Hash password
-  const hashedPassword = await bcrypt.hash(password, 10);
+  // 🔐 Auto-generate password
+  const plainPassword = generateRandomPassword(10);
+  const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
-  // Create guard directly (no OTP, no verification)
+  // 🏠 Default address
+  const address = "Add your address";
+
+  // 👮 Create Guard
   const newGuard = await userModel.create({
     name,
     email,
+    mobile,
     password: hashedPassword,
     address,
-    mobile,
-    avatar,
     role: "guard",
-    isVerified: true, // Force verified since admin is adding
+    isVerified: true,
   });
+
+  // 📧 Email template data
+  const emailTemplate = generateGuardCreatedTemplate({
+    name,
+    email,
+    mobile,
+    password: plainPassword,
+    address,
+    appLink: "https://play.google.com/store/apps/details?id=com.vigilo.app", // update if needed
+  });
+
+  // 📤 Send Email
+  await sendEmail(name, email, emailTemplate);
 
   return res.status(StatusCodes.CREATED).json({
     success: true,
-    message: "Guard created successfully.",
-    guard: newGuard,
+    message: "Guard created successfully and credentials sent via email.",
+    guardId: newGuard.id,
   });
 });
+
 
 
 // Verify Email OTP
