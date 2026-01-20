@@ -248,7 +248,7 @@ export const acceptOrder = catchAsyncError(async (req, res, next) => {
 });
 
 export const getAllOrders = catchAsyncError(async (req, res, next) => {
-  let { page = 1, limit = 10, status, serviceType, search } = req.query;
+  let { page = 1, limit = 10, status, serviceType, search = "" } = req.query;
 
   page = parseInt(page);
   limit = parseInt(limit);
@@ -256,6 +256,7 @@ export const getAllOrders = catchAsyncError(async (req, res, next) => {
   if (isNaN(limit) || limit < 1) limit = 10;
 
   const offset = (page - 1) * limit;
+
   const allowedStatuses = [
     "pending",
     "upcoming",
@@ -273,47 +274,52 @@ export const getAllOrders = catchAsyncError(async (req, res, next) => {
     "industrialSecurity",
   ];
 
-  const whereCondition = {};
-
-  if (status && allowedStatuses.includes(status)) {
-    whereCondition.status = status;
-  }
-
-  if (serviceType && allowedServiceTypes.includes(serviceType)) {
-    whereCondition.serviceType = serviceType;
-  }
-
-  if (search) {
-    whereCondition[Op.or] = [
-      { id: { [Op.iLike]: `%${search}%` } },
-      { customerName: { [Op.iLike]: `%${search}%` } },
-    ];
-  }
-
   const { count, rows: orders } = await Order.findAndCountAll({
-  where: whereCondition,
-  order: [["createdAt", "DESC"]],
-  limit,
-  offset,
-  attributes: [
-    "id",
-    "status",
-    "serviceType",
-    "locationName",       // ← ADD THIS
-    "locationAddress",
-    "guardsRequired",
-    "startDate",
-    "endDate",
-    "startTime",
-    "endTime",
-    "images",
-    "createdAt",
-    "updatedAt",
-    "siteService",         // ← Add this too
-  ]
-});
-
-  
+    where: {
+      // Status filter
+      ...(status && allowedStatuses.includes(status) && { status }),
+      
+      // Service type filter
+      ...(serviceType && allowedServiceTypes.includes(serviceType) && { serviceType }),
+      
+      // Search filter - SIMPLE like guards/clients
+      ...(search && {
+        [Op.or]: [
+          { locationName: { [Op.iLike]: `%${search}%` } },
+          { locationAddress: { [Op.iLike]: `%${search}%` } },
+          { description: { [Op.iLike]: `%${search}%` } },
+        ],
+      }),
+    },
+    include: [
+      {
+        model: User,
+        as: "user",
+        attributes: ["id", "name", "email", "mobile", "address"],
+      },
+    ],
+    attributes: [
+      "id",
+      "status",
+      "serviceType",
+      "locationName",
+      "locationAddress",
+      "guardsRequired",
+      "description",
+      "startDate",
+      "endDate",
+      "startTime",
+      "endTime",
+      "images",
+      "createdAt",
+      "updatedAt",
+      "siteService",
+      "userId",
+    ],
+    limit,
+    offset,
+    order: [["createdAt", "DESC"]],
+  });
 
   res.status(StatusCodes.OK).json({
     success: true,
@@ -327,6 +333,9 @@ export const getAllOrders = catchAsyncError(async (req, res, next) => {
     },
   });
 });
+
+
+
 
 export const getAdminOrderById = catchAsyncError(async (req, res, next) => {
   const { id } = req.params;
