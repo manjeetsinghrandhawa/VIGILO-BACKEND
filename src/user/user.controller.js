@@ -701,10 +701,26 @@ export const getGuardById = catchAsyncError(async (req, res, next) => {
 
 // Fetch all clients details 
 export const getAllClients = catchAsyncError(async (req, res, next) => {
-  // Find the Clients
-  const users = await userModel.findAll({
-    where: { role: "user" },
-    attributes: ["id", "name", "email", "mobile", "address", "avatar"], // ← ADD AVATAR
+  let { page = 1, limit = 10, search = "" } = req.query;
+  page = parseInt(page);
+  limit = parseInt(limit);
+  const offset = (page - 1) * limit;
+
+  const { count, rows: users } = await userModel.findAndCountAll({
+    where: {
+      role: "user",
+      ...(search && {
+        [Op.or]: [
+          { name: { [Op.iLike]: `%${search}%` } },
+          { email: { [Op.iLike]: `%${search}%` } },
+          { mobile: { [Op.iLike]: `%${search}%` } },
+          { address: { [Op.iLike]: `%${search}%` } },
+        ],
+      }),
+    },
+    attributes: ["id", "name", "email", "mobile", "address", "avatar"],
+    limit,
+    offset,
     order: [["createdAt", "DESC"]],
   });
 
@@ -712,11 +728,16 @@ export const getAllClients = catchAsyncError(async (req, res, next) => {
     return next(new ErrorHandler("No clients found", StatusCodes.NOT_FOUND));
   }
 
-  // Response
   res.status(StatusCodes.OK).json({
     success: true,
     message: "Clients fetched successfully",
     data: users,
+    pagination: {
+      total: count,
+      page,
+      totalPages: Math.ceil(count / limit),
+      limit,
+    },
   });
 });
 
