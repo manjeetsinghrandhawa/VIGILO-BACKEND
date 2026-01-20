@@ -88,6 +88,56 @@ export const getMyNotifications = async (req, res) => {
   }
 };
 
+export const markAllNotificationsAsRead = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { filter = "all" } = req.body || {};
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    /**
+     * 🔥 SAME FILTER LOGIC
+     */
+    let whereClause = { userId };
+
+    if (filter === "unread") {
+      whereClause.isRead = false;
+    }
+
+    if (filter === "newRequests") {
+      whereClause.type = "newRequest";
+      whereClause.isRead = false;
+    }
+
+    /**
+     * ✅ MARK AS READ
+     */
+    const [updatedCount] = await Notification.update(
+      { isRead: true },
+      { where: whereClause }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Notifications marked as read successfully",
+      filter,
+      updatedCount,
+    });
+  } catch (error) {
+    console.error("MARK ALL READ ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to mark notifications as read",
+    });
+  }
+};
+
+
 
 export const deleteAllNotifications = async (req, res) => {
   try {
