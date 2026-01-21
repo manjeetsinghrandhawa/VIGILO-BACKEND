@@ -124,6 +124,33 @@ export const createSchedule = async (req, res, next) => {
       ],
     });
 
+    /**
+     * 🔔 NOTIFICATIONS
+     */
+    const notificationsPayload = guardIds.map((guardId) => ({
+      userId: guardId,
+      role: "guard",
+      title: "New Shift Assigned",
+      message: `A new shift has been assigned to you from ${startTime} to ${endTime} on ${normalizedStartDate}${
+        endDate ? ` till ${normalizedEndDate}` : ""
+      }.`,
+      type: "SHIFT_ASSIGNED",
+      data: {
+        shiftId: staticShift.id,
+        orderId,
+        // ✅ ADD LOCATION HERE
+    locationName: order.locationName,
+    locationAddress: order.locationAddress,
+        startTime,
+        endTime,
+        startDate: normalizedStartDate,
+        endDate: normalizedEndDate,
+      },
+    }));
+
+    await Notification.bulkCreate(notificationsPayload);
+
+
     return res.status(StatusCodes.CREATED).json({
       success: true,
       message: "Shift assigned successfully",

@@ -360,7 +360,7 @@ export const getStaticShiftById = async (req, res, next) => {
       {
         model: Order,
         as: "order",
-        attributes: ["locationName", "locationAddress"],
+        attributes: ["locationName", "locationAddress", "images"],
       },
 
       /** 🔹 Incidents of this shift */
@@ -411,6 +411,7 @@ export const getStaticShiftById = async (req, res, next) => {
         ? {
             locationName: staticShift.order.locationName,
             locationAddress: staticShift.order.locationAddress,
+            images: staticShift.order.images || [],
           }
         : null,
 
