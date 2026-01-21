@@ -23,18 +23,13 @@ export const createSchedule = async (req, res, next) => {
       startTime,
       endTime,
       date,
-      endDate,   // ✅ NEW FIELD
+      endDate,
       guardIds,
       orderId,
     } = req.body;
 
-    console.log("Incoming Create Schedule Body:", req.body);
-
-    // 🔒 Validations
     if (!orderId) {
-      return next(
-        new ErrorHandler("Order ID is required", StatusCodes.BAD_REQUEST)
-      );
+      return next(new ErrorHandler("Order ID is required", StatusCodes.BAD_REQUEST));
     }
 
     if (!startTime || !endTime) {
@@ -49,13 +44,11 @@ export const createSchedule = async (req, res, next) => {
       );
     }
 
-    // 🔎 Order check
     const order = await Order.findByPk(orderId);
     if (!order) {
       return next(new ErrorHandler("Order not found", StatusCodes.NOT_FOUND));
     }
 
-    // 🔎 Guard validation
     const guards = await User.findAll({ where: { id: guardIds } });
     if (guards.length !== guardIds.length) {
       return next(
@@ -65,67 +58,61 @@ export const createSchedule = async (req, res, next) => {
 
     const tz = getTimeZone();
 
-    /**
-     * 🕒 DATE NORMALIZATION
-     */
-    const normalizedStartDate = date
-      ? moment(date).format("YYYY-MM-DD")
-      : null;
-
+    /** 📅 Normalize dates */
+    const normalizedStartDate = moment(date).format("YYYY-MM-DD");
     const normalizedEndDate = endDate
       ? moment(endDate).format("YYYY-MM-DD")
-      : normalizedStartDate; // fallback to start date if not provided
+      : normalizedStartDate;
 
-    const start = normalizedStartDate
-      ? moment
-          .tz(`${normalizedStartDate} ${startTime}`, "YYYY-MM-DD HH:mm", tz)
-          .utc()
-          .toDate()
-      : moment.tz(startTime, tz).utc().toDate();
+    /** 🕒 Build datetime */
+    const start = moment
+      .tz(`${normalizedStartDate} ${startTime}`, "YYYY-MM-DD HH:mm", tz)
+      .utc()
+      .toDate();
 
-    const end = normalizedEndDate
-      ? moment
-          .tz(`${normalizedEndDate} ${endTime}`, "YYYY-MM-DD HH:mm", tz)
-          .utc()
-          .toDate()
-      : moment.tz(endTime, tz).utc().toDate();
+    const end = moment
+      .tz(`${normalizedEndDate} ${endTime}`, "YYYY-MM-DD HH:mm", tz)
+      .utc()
+      .toDate();
 
-    /**
-     * 🏗️ CREATE SHIFT 21
-     */
+    /** 🧠 STATUS DECISION LOGIC */
+    const today = moment().tz(tz).startOf("day");
+    const startDay = moment(normalizedStartDate).startOf("day");
+    const endDay = moment(normalizedEndDate).endOf("day");
+
+    let shiftStatus = "pending";
+    let guardStatus = "pending";
+
+    if (today.isAfter(endDay)) {
+      shiftStatus = "completed";
+      guardStatus = "completed";
+    } else if (today.isSameOrAfter(startDay) && today.isSameOrBefore(endDay)) {
+      shiftStatus = "ongoing";
+      guardStatus = "ongoing";
+    }
+
+    /** 🏗️ CREATE SHIFT */
     const staticShift = await Static.create({
       orderId,
       description,
-      // ✅ SAVE DATES
-  date: normalizedStartDate,
-  endDate: normalizedEndDate,
+      date: normalizedStartDate,
+      endDate: normalizedEndDate,
       startTime: start,
       endTime: end,
       type: "static",
-      status: "pending",
+      status: shiftStatus,
     });
 
-    /**
-     * 👮 ASSIGN GUARDS
-     */
+    /** 👮 ASSIGN GUARDS */
     const guardAssignments = guardIds.map((guardId) => ({
       staticId: staticShift.id,
       guardId,
-      status: "pending",
+      status: guardStatus,
     }));
 
-    try {
-      await StaticGuards.bulkCreate(guardAssignments);
-    } catch (pivotErr) {
-      await staticShift.destroy().catch(() => {});
-      return next(
-        new ErrorHandler("Failed to assign guards", StatusCodes.INTERNAL_SERVER_ERROR)
-      );
-    }
+    await StaticGuards.bulkCreate(guardAssignments);
 
-    /**
-     * 📦 FETCH CREATED SHIFT
-     */
+    /** 📦 FETCH SHIFT */
     const createdShift = await Static.findByPk(staticShift.id, {
       include: [
         {
@@ -137,36 +124,13 @@ export const createSchedule = async (req, res, next) => {
       ],
     });
 
-    /**
-     * 🔔 NOTIFICATIONS
-     */
-    const notificationsPayload = guardIds.map((guardId) => ({
-      userId: guardId,
-      role: "guard",
-      title: "New Shift Assigned",
-      message: `A new shift has been assigned to you from ${startTime} to ${endTime} on ${normalizedStartDate}${
-        endDate ? ` till ${normalizedEndDate}` : ""
-      }.`,
-      type: "SHIFT_ASSIGNED",
-      data: {
-        shiftId: staticShift.id,
-        orderId,
-        startTime,
-        endTime,
-        startDate: normalizedStartDate,
-        endDate: normalizedEndDate,
-      },
-    }));
-
-    await Notification.bulkCreate(notificationsPayload);
-
     return res.status(StatusCodes.CREATED).json({
       success: true,
       message: "Shift assigned successfully",
       data: createdShift,
     });
   } catch (error) {
-    console.error("CREATE SCHEDULE ERROR:", error.stack || error);
+    console.error("CREATE SCHEDULE ERROR:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -174,6 +138,7 @@ export const createSchedule = async (req, res, next) => {
     });
   }
 };
+
 
 export const editSchedule = async (req, res, next) => {
   try {
