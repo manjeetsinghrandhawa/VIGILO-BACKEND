@@ -492,3 +492,48 @@ export const getUserUpcomingOrders = async (req, res, next) => {
   });
 };
 
+export const getUserOngoingOrders = async (req, res, next) => {
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return next(
+      new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+    );
+  }
+
+  let { page = 1, limit = 10 } = req.query;
+
+  page = parseInt(page);
+  limit = parseInt(limit);
+
+  if (isNaN(page) || page < 1) page = 1;
+  if (isNaN(limit) || limit < 1) limit = 10;
+
+  const offset = (page - 1) * limit;
+
+  const { count, rows: orders } = await Order.findAndCountAll({
+    where: {
+      userId,
+      status: "ongoing",
+    },
+    order: [
+      ["startDate", "ASC"],
+      ["startTime", "ASC"],
+    ],
+    limit,
+    offset,
+  });
+
+  res.status(StatusCodes.OK).json({
+    success: true,
+    message: "Ongoing orders fetched successfully",
+    data: orders,
+    pagination: {
+      total: count,
+      page,
+      totalPages: Math.ceil(count / limit),
+      limit,
+    },
+  });
+};
+

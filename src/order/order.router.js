@@ -9,7 +9,8 @@ import {
   getAllOrders, 
   getOrderById, 
   getUserOrders,
-  getUserUpcomingOrders
+  getUserUpcomingOrders,
+  getUserOngoingOrders
 } from "./order.controller.js";
 
 const route = express.Router();
@@ -21,7 +22,7 @@ route.post("/createOrder", auth, isUser, createOrder);
 route.get("/getUserOrders", auth, isUser, getUserOrders);
 route.get("/getOrderById/:id", auth, isUser, getOrderById);
 route.get("/getUserUpcomingOrders", auth, isUser, getUserUpcomingOrders);
-
+route.get("/getUserOngoingOrders", auth, isUser, getUserOngoingOrders);
 // ============================================
 // ADMIN ROUTES
 // ============================================
