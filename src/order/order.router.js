@@ -8,7 +8,8 @@ import {
   getAdminOrderById, 
   getAllOrders, 
   getOrderById, 
-  getUserOrders 
+  getUserOrders,
+  getUserUpcomingOrders
 } from "./order.controller.js";
 
 const route = express.Router();
@@ -19,6 +20,7 @@ const route = express.Router();
 route.post("/createOrder", auth, isUser, createOrder);
 route.get("/getUserOrders", auth, isUser, getUserOrders);
 route.get("/getOrderById/:id", auth, isUser, getOrderById);
+route.get("/getUserUpcomingOrders", auth, isUser, getUserUpcomingOrders);
 
 // ============================================
 // ADMIN ROUTES
