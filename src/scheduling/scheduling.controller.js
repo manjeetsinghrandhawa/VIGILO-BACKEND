@@ -530,7 +530,7 @@ export const getMyAllShifts = async (req, res, next) => {
           required: true,
         },
       ],
-      order: [["startTime", "ASC"]],
+      order: [["startTime", "DESC"]],
       limit,
       offset,
     });
