@@ -86,10 +86,7 @@ export const createSchedule = async (req, res, next) => {
     if (today.isAfter(endDay)) {
       shiftStatus = "completed";
       guardStatus = "completed";
-    } else if (today.isSameOrAfter(startDay) && today.isSameOrBefore(endDay)) {
-      shiftStatus = "ongoing";
-      guardStatus = "ongoing";
-    }
+    } 
 
     /** 🏗️ CREATE SHIFT */
     const staticShift = await Static.create({
@@ -2384,6 +2381,18 @@ export const getTimeSheets = async (req, res) => {
       "startTime",
       "endTime",
     ],
+     include: [
+      {
+        model: Order,
+        as: "order",
+        attributes: [
+          "serviceType",
+          "locationName",
+          "locationAddress",
+          "images",
+        ],
+      },
+    ],
   },
   {
     model: User,
@@ -2407,6 +2416,11 @@ export const getTimeSheets = async (req, res) => {
     return {
       shiftId: row.static.id,
       orderId: row.static.orderId,
+      // 📍 ORDER DETAILS
+  serviceType: row.static.order?.serviceType || null,
+  locationName: row.static.order?.locationName || null,
+  locationAddress: row.static.order?.locationAddress || null,
+  images: row.static.order?.images || [],
 
       date: shiftStart.format("DD MMM YYYY"),
 
@@ -2463,6 +2477,186 @@ export const getTimeSheets = async (req, res) => {
     });
   }
 };
+
+export const getStaticShiftDetailsForAdmin = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
+
+    /** 🔐 Ensure admin */
+    const admin = await User.findByPk(userId);
+    if (!admin || admin.role !== "admin") {
+      return next(
+        new ErrorHandler("Access denied", StatusCodes.FORBIDDEN)
+      );
+    }
+
+    /** 🔍 FETCH SHIFT */
+    const staticShift = await Static.findByPk(id, {
+      attributes: [
+        "id",
+        "orderId",
+        "type",
+        "description",
+        "date",
+        "endDate",
+        "status",
+        "startTime",
+        "endTime",
+        "createdAt",
+      ],
+      include: [
+        /** 👮 Assigned Guards + Timesheet */
+        {
+          model: User,
+          as: "guards",
+          attributes: ["id", "name", "email", "mobile"],
+          through: {
+            attributes: [
+              "status",
+              "clockInTime",
+              "clockOutTime",
+              "overtimeStartTime",
+              "overtimeEndTime",
+              "overtimeHours",
+              "totalHours",
+            ],
+          },
+        },
+
+        /** 📍 Order / Client / Location */
+        {
+          model: Order,
+          as: "order",
+          attributes: [
+            "serviceType",
+            "locationName",
+            "locationAddress",
+            "images",
+            "siteService",
+            "guardsRequired",
+            "description",
+            "startDate",
+            "endDate",
+            "startTime",
+            "endTime",
+          ],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["id", "name", "email", "mobile"],
+            },
+          ],
+        },
+
+        /** 🚨 Incidents */
+        {
+          model: Incident,
+          as: "incidents",
+          attributes: [
+            "id",
+            "name",
+            "location",
+            "description",
+            "images",
+            "createdAt",
+          ],
+          include: [
+            {
+              model: User,
+              as: "reporter",
+              attributes: ["id", "name", "email"],
+            },
+          ],
+        },
+      ],
+    });
+
+    if (!staticShift) {
+      return next(new ErrorHandler("Shift not found", StatusCodes.NOT_FOUND));
+    }
+
+    /** 🧾 FORMAT RESPONSE */
+    const guards = staticShift.guards.map((guard) => {
+      const t = guard.StaticGuards;
+
+      return {
+        id: guard.id,
+        name: guard.name,
+        email: guard.email,
+        phone: guard.mobile,
+
+        assignmentStatus: t.status,
+
+        timesheet: {
+          clockInTime: t.clockInTime,
+          clockOutTime: t.clockOutTime,
+          totalHours: t.totalHours ?? 0,
+
+          overtime: {
+            startTime: t.overtimeStartTime,
+            endTime: t.overtimeEndTime,
+            hours: t.overtimeHours ?? 0,
+          },
+        },
+      };
+    });
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Shift details fetched successfully",
+      data: {
+        shift: {
+          id: staticShift.id,
+          type: staticShift.type,
+          description: staticShift.description,
+          date: staticShift.date,
+          endDate: staticShift.endDate,
+          status: staticShift.status,
+          startTime: staticShift.startTime,
+          endTime: staticShift.endTime,
+          createdAt: staticShift.createdAt,
+        },
+
+        client: staticShift.order?.user || null,
+
+        order: staticShift.order
+          ? {
+              serviceType: staticShift.order.serviceType,
+              locationName: staticShift.order.locationName,
+              locationAddress: staticShift.order.locationAddress,
+              images: staticShift.order.images || [],
+              siteService: staticShift.order.siteService,
+              guardsRequired: staticShift.order.guardsRequired,
+              description: staticShift.order.description,
+              startDate: staticShift.order.startDate,
+              endDate: staticShift.order.endDate,
+              startTime: staticShift.order.startTime,
+              endTime: staticShift.order.endTime,
+            }
+          : null,
+
+        guards,
+
+        incidents: staticShift.incidents || [],
+      },
+    });
+  } catch (error) {
+    console.error("ADMIN SHIFT DETAILS ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
 
 
 

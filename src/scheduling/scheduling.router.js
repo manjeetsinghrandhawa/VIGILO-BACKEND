@@ -16,7 +16,8 @@ import {
   endOvertime,
   getMyShiftsByDate,
   requestOffStaticShift,
-  requestChangeStaticShift
+  requestChangeStaticShift,
+  getStaticShiftDetailsForAdmin
   
 } from "./scheduling.controller.js";
 import { auth, isGaurd, isAdmin } from "../../middlewares/auth.js";
@@ -64,6 +65,8 @@ router.post("/getMyShiftsByDate",auth,isGaurd, getMyShiftsByDate);
 router.post("/requestOffStaticShift",auth,isGaurd, requestOffStaticShift );
 
 router.post("/requestChangeStaticShift",auth,isGaurd, requestChangeStaticShift );
+
+router.get("/getStaticShiftDetailsForAdmin/:id",auth,isAdmin, getStaticShiftDetailsForAdmin);
 
 
 
