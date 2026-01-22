@@ -11,18 +11,20 @@ import { notifyAdminOnly } from "../../utils/notifyAdminOnly.helper.js";
 
 
 /**
- * 🕒 Build UTC datetime from date + time
+ * 🕒 Build datetime in BUSINESS TIMEZONE (NOT UTC)
  */
-const buildDateTime = (date, time) => {
-  return moment.utc(
-    `${moment.utc(date).format("YYYY-MM-DD")} ${time}`,
-    "YYYY-MM-DD HH:mm"
+const buildDateTime = (date, time, tz) => {
+  return moment.tz(
+    `${moment(date).format("YYYY-MM-DD")} ${time}`,
+    "YYYY-MM-DD HH:mm",
+    tz
   );
 };
 
 const updateOrderStatuses = async () => {
   try {
-    const now = moment.utc();
+    const tz = getTimeZone(); // 👈 e.g. "Asia/Kolkata"
+    const now = moment().tz(tz);
 
     const orders = await Order.findAll({
       where: {
@@ -35,24 +37,26 @@ const updateOrderStatuses = async () => {
     let updatedCount = 0;
 
     for (const order of orders) {
-      const startDateTime = buildDateTime(order.startDate, order.startTime);
+      const startDateTime = buildDateTime(
+        order.startDate,
+        order.startTime,
+        tz
+      );
+
       const endDateTime = buildDateTime(
         order.endDate || order.startDate,
-        order.endTime
+        order.endTime,
+        tz
       );
 
       let newStatus = null;
 
-      /**
-       * 🔴 pending → missed
-       */
+      // 🔴 pending → missed
       if (order.status === "pending" && now.isAfter(startDateTime)) {
         newStatus = "missed";
       }
 
-      /**
-       * 🟡 upcoming → ongoing
-       */
+      // 🟡 upcoming → ongoing
       else if (
         order.status === "upcoming" &&
         now.isSameOrAfter(startDateTime)
@@ -60,36 +64,32 @@ const updateOrderStatuses = async () => {
         newStatus = "ongoing";
       }
 
-      /**
-       * 🟢 ongoing → completed
-       */
-      else if (order.status === "ongoing" && now.isAfter(endDateTime)) {
+      // 🟢 ongoing → completed
+      else if (
+        order.status === "ongoing" &&
+        now.isAfter(endDateTime)
+      ) {
         newStatus = "completed";
       }
 
-      /**
-       * ✅ APPLY STATUS CHANGE
-       */
       if (newStatus && newStatus !== order.status) {
         await order.update({ status: newStatus });
         updatedCount++;
 
-        /**
-         * 🔔 ADMIN NOTIFICATION (ONLY ON TRANSITION)
-         */
+        // 🔔 ADMIN NOTIFICATION (ONLY ON MISSED)
         if (newStatus === "missed") {
-    await notifyAdminOnly({
-      title: "Order Missed",
-      type: "ORDER_MISSED",
-      message: `Order at ${order.locationName} was missed. Start time was ${order.startTime}.`,
-      data: {
-        orderId: order.id,
-        locationName: order.locationName,
-        startDate: order.startDate,
-        startTime: order.startTime,
-      },
-    });
-  }
+          await notifyAdminOnly({
+            title: "Order Missed",
+            type: "ORDER_MISSED",
+            message: `Order at ${order.locationName} was missed. Start time was ${order.startTime}.`,
+            data: {
+              orderId: order.id,
+              locationName: order.locationName,
+              startDate: order.startDate,
+              startTime: order.startTime,
+            },
+          });
+        }
       }
     }
 
@@ -100,12 +100,17 @@ const updateOrderStatuses = async () => {
 };
 
 /**
- * 🔁 RUN EVERY 1 MINUTE (THIS IS ENOUGH)
+ * 🔁 RUN EVERY MINUTE
  */
-cron.schedule("*/1 * * * *", async () => {
-  await updateOrderStatuses();
-});
-
+cron.schedule(
+  "*/1 * * * *",
+  async () => {
+    await updateOrderStatuses();
+  },
+  {
+    timezone: getTimeZone(),
+  }
+);
 cron.schedule("*/10 * * * *", async () => {
   try {
     const tz = getTimeZone();
