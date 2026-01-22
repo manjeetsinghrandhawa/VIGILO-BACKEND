@@ -8,12 +8,20 @@ import User from "../user/user.model.js";
 import { getTimeZone } from "../../utils/timeZone.js";
 import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
 
+/**
+ * 🕒 Build UTC datetime from date + time
+ */
+const buildDateTime = (date, time) => {
+  return moment.utc(
+    `${moment.utc(date).format("YYYY-MM-DD")} ${time}`,
+    "YYYY-MM-DD HH:mm"
+  );
+};
 
 const updateOrderStatuses = async () => {
-  const tz = getTimeZone();
-  const now = moment().tz(tz);
-
   try {
+    const now = moment.utc();
+
     const orders = await Order.findAll({
       where: {
         status: {
@@ -22,102 +30,79 @@ const updateOrderStatuses = async () => {
       },
     });
 
-    if (!orders.length) {
-      console.log("No orders found for order status update.");
-      return;
-    }
-
     let updatedCount = 0;
 
     for (const order of orders) {
-      /**
-       * 🕒 Build full START datetime
-       */
-      const orderStartDateTime = moment
-        .utc(order.startDate)
-        .tz(tz)
-        .set({
-          hour: moment(order.startTime, "HH:mm").hour(),
-          minute: moment(order.startTime, "HH:mm").minute(),
-          second: 0,
-        });
-
-      /**
-       * 🕒 Build full END datetime
-       */
-      const orderEndDateTime = moment
-        .utc(order.endDate ?? order.startDate)
-        .tz(tz)
-        .set({
-          hour: moment(order.endTime, "HH:mm").hour(),
-          minute: moment(order.endTime, "HH:mm").minute(),
-          second: 0,
-        });
+      const startDateTime = buildDateTime(order.startDate, order.startTime);
+      const endDateTime = buildDateTime(
+        order.endDate || order.startDate,
+        order.endTime
+      );
 
       let newStatus = null;
 
       /**
-       * 🔴 CASE 1: pending → missed
+       * 🔴 pending → missed
        */
-      if (
-        order.status === "pending" &&
-        now.isAfter(orderStartDateTime)
-      ) {
+      if (order.status === "pending" && now.isAfter(startDateTime)) {
         newStatus = "missed";
       }
 
       /**
-       * 🟢 CASE 2: upcoming → ongoing
+       * 🟡 upcoming → ongoing
        */
       else if (
         order.status === "upcoming" &&
-        now.isSameOrAfter(orderStartDateTime)
+        now.isSameOrAfter(startDateTime)
       ) {
         newStatus = "ongoing";
       }
 
       /**
-       * 🔵 CASE 3: ongoing → completed
+       * 🟢 ongoing → completed
        */
-      else if (
-        order.status === "ongoing" &&
-        now.isSameOrAfter(orderEndDateTime)
-      ) {
+      else if (order.status === "ongoing" && now.isAfter(endDateTime)) {
         newStatus = "completed";
       }
 
+      /**
+       * ✅ APPLY STATUS CHANGE
+       */
       if (newStatus && newStatus !== order.status) {
         await order.update({ status: newStatus });
         updatedCount++;
+
+        /**
+         * 🔔 ADMIN NOTIFICATION (ONLY ON TRANSITION)
+         */
+        if (newStatus === "missed") {
+          await notifyGuardAndAdmin({
+            notifyGuard: false, // admin only
+            status: "order_missed",
+            adminMessage: `Order at ${order.locationName} was missed. Start time was ${order.startTime}.`,
+            data: {
+              orderId: order.id,
+              locationName: order.locationName,
+              startDate: order.startDate,
+              startTime: order.startTime,
+            },
+          });
+        }
       }
     }
 
-    console.log(
-      `Order status cron completed. Orders updated: ${updatedCount}`
-    );
+    console.log(`✅ Order status cron updated ${updatedCount} orders`);
   } catch (error) {
-    console.error("ORDER STATUS CRON ERROR:", error);
+    console.error("❌ ORDER STATUS CRON ERROR:", error);
   }
 };
 
-
-
-// ✅ Schedule the cron job at 00:01 every day (India time)
-cron.schedule(
-  "1 0 * * *",
-  async () => {
-    const tz = getTimeZone();
-    console.log(
-      "Running daily order status update at:",
-      new Date().toLocaleString("en-IN", { timeZone: tz })
-    );
-    await updateOrderStatuses();
-  },
-  {
-    scheduled: true,
-    timezone: getTimeZone(),
-  }
-);
+/**
+ * 🔁 RUN EVERY 1 MINUTE (THIS IS ENOUGH)
+ */
+cron.schedule("*/1 * * * *", async () => {
+  await updateOrderStatuses();
+});
 
 cron.schedule("*/10 * * * *", async () => {
   try {
