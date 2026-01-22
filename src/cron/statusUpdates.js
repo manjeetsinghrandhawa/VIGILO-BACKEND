@@ -7,6 +7,8 @@ import StaticGuards from "../shift/staticGuards.model.js";
 import User from "../user/user.model.js";
 import { getTimeZone } from "../../utils/timeZone.js";
 import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
+import { notifyAdminOnly } from "../../utils/notifyAdminOnly.helper.js";
+
 
 /**
  * 🕒 Build UTC datetime from date + time
@@ -76,18 +78,18 @@ const updateOrderStatuses = async () => {
          * 🔔 ADMIN NOTIFICATION (ONLY ON TRANSITION)
          */
         if (newStatus === "missed") {
-          await notifyGuardAndAdmin({
-            notifyGuard: false, // admin only
-            status: "order_missed",
-            adminMessage: `Order at ${order.locationName} was missed. Start time was ${order.startTime}.`,
-            data: {
-              orderId: order.id,
-              locationName: order.locationName,
-              startDate: order.startDate,
-              startTime: order.startTime,
-            },
-          });
-        }
+    await notifyAdminOnly({
+      title: "Order Missed",
+      type: "ORDER_MISSED",
+      message: `Order at ${order.locationName} was missed. Start time was ${order.startTime}.`,
+      data: {
+        orderId: order.id,
+        locationName: order.locationName,
+        startDate: order.startDate,
+        startTime: order.startTime,
+      },
+    });
+  }
       }
     }
 
