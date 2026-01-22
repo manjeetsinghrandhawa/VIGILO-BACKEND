@@ -1,5 +1,5 @@
-import Notification from "../modules/notification/notification.model.js";
-import User from "../modules/user/user.model.js";
+import Notification from "../src/notifications/notifications.model.js";
+import User from "../src/user/user.model.js";
 
 export const notifyAdminOnly = async ({
   title,
