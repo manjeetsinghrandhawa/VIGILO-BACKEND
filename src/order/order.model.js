@@ -99,6 +99,7 @@ const Order = sequelize.define(
     status: {
       type: DataTypes.ENUM(
         "pending",
+        "missed",
         "upcoming",
         "ongoing",
         "completed",
