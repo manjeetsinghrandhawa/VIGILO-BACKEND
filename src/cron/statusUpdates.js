@@ -111,7 +111,7 @@ cron.schedule(
     timezone: getTimeZone(),
   }
 );
-cron.schedule("*/10 * * * *", async () => {
+cron.schedule("*/1 * * * *", async () => {
   try {
     const tz = getTimeZone();
     const now = moment().tz(tz);
