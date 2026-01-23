@@ -1,5 +1,5 @@
 import express from "express";
-import { registerUser, verifyRegisterEmail,deleteClient,createGuardByAdmin, resendOtp, userLogin, registerAdmin, forgotPassword, verifyForgotPasswordOtp, resendForgotPasswordOtp, setNewPassword, registerGaurd, getProfile, editProfile, deleteProfile, getAllGuards, getGuardById,getAllClients, editClient, getClientById } from "./user.controller.js";
+import { registerUser, verifyRegisterEmail,deleteClient,createGuardByAdmin, resendOtp, userLogin, registerAdmin, forgotPassword, verifyForgotPasswordOtp, resendForgotPasswordOtp, setNewPassword, registerGaurd, getProfile, editProfile, deleteProfile, getAllGuards, getGuardById,getAllClients, editClient, getClientById,editGuard } from "./user.controller.js";
 import { auth, isAdmin } from "../../middlewares/auth.js";
 
 const route = express.Router();
@@ -28,5 +28,6 @@ route.post("/createGuardByAdmin", auth, isAdmin,createGuardByAdmin);
 
 route.get("/getClientById/:id", auth, isAdmin, getClientById); 
 route.put("/editClient/:id", auth, isAdmin, editClient); 
+route.put("/editGuard", auth, isAdmin, editGuard )
 
 export default route;

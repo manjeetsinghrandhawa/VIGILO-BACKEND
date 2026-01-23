@@ -693,7 +693,7 @@ export const getGuardById = catchAsyncError(async (req, res, next) => {
       {
         model: Order,
         as: "order",
-        attributes: ["id", "serviceType", "locationName", "locationAddress"],
+        attributes: ["id", "serviceType", "locationName", "locationAddress", "status"],
       },
     ],
     order: [["createdAt", "DESC"]],
@@ -895,4 +895,71 @@ export const deleteClient = catchAsyncError(async (req, res, next) => {
     message: "Client deleted successfully",
   });
 });
+
+// Edit / Update guard details
+export const editGuard = async (req, res, next) => {
+  const { id } = req.params;
+  const { 
+    name,
+    email,
+    mobile,
+    countryCode,
+    address,
+    avatar,
+    employeeId,
+    joinedDate,
+    status
+  } = req.body;
+
+  /** 1️⃣ Find guard */
+  const guard = await userModel.findOne({
+    where: {
+      id,
+      role: "guard",
+    },
+  });
+
+  if (!guard) {
+    return next(
+      new ErrorHandler("Guard not found", StatusCodes.NOT_FOUND)
+    );
+  }
+
+  /** 2️⃣ Email uniqueness check */
+  if (email && email !== guard.email) {
+    const emailExists = await userModel.findOne({
+      where: { email },
+    });
+
+    if (emailExists) {
+      return next(
+        new ErrorHandler("Email already in use", StatusCodes.BAD_REQUEST)
+      );
+    }
+  }
+
+  /** 3️⃣ Prepare update payload */
+  const updateData = {};
+
+  if (name) updateData.name = name;
+  if (email) updateData.email = email;
+  if (mobile) updateData.mobile = mobile;
+  if (countryCode !== undefined) updateData.countryCode = countryCode;
+  if (address !== undefined) updateData.address = address;
+  if (avatar !== undefined) updateData.avatar = avatar;
+
+  // Optional guard-specific fields
+  if (employeeId !== undefined) updateData.employeeId = employeeId;
+  if (joinedDate !== undefined) updateData.joinedDate = joinedDate;
+  if (status !== undefined) updateData.status = status;
+
+  /** 4️⃣ Update */
+  await guard.update(updateData);
+
+  res.status(StatusCodes.OK).json({
+    success: true,
+    message: "Guard updated successfully",
+    data: guard,
+  });
+};
 
