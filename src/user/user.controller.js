@@ -658,7 +658,7 @@ export const getAllGuards = catchAsyncError(async (req, res, next) => {
 export const getGuardById = catchAsyncError(async (req, res, next) => {
   const { id } = req.params;
 
-  // 1️⃣ Find the guard
+  /** 1️⃣ Find Guard */
   const guard = await userModel.findOne({
     where: { id, role: "guard" },
     attributes: ["id", "name", "email", "mobile", "address", "createdAt"],
@@ -668,36 +668,83 @@ export const getGuardById = catchAsyncError(async (req, res, next) => {
     return next(new ErrorHandler("Guard not found", StatusCodes.NOT_FOUND));
   }
 
-  // 2️⃣ Find the latest accepted static (exclude guards data)
-  const latestStatic = await Static.findOne({
+  /** 2️⃣ Fetch last activities (timesheets) */
+  const statics = await Static.findAll({
     include: [
       {
         model: userModel,
         as: "guards",
-        attributes: [], // ✅ don't include any guard fields
         where: { id: guard.id },
-        through: { where: { status: "accepted" }, attributes: [] }, // ✅ no StaticGuards data
+        attributes: ["id", "name"],
+        through: {
+          attributes: [
+            "status",
+            "clockInTime",
+            "clockOutTime",
+            "totalHours",
+            "overtimeStartTime",
+            "overtimeEndTime",
+            "overtimeHours",
+            "createdAt",
+          ],
+        },
         required: true,
       },
       {
         model: Order,
         as: "order",
-        attributes: ["id", "serviceType", "locationName","locationAddress", "status"],
+        attributes: ["id", "serviceType", "locationName", "locationAddress"],
       },
     ],
-    order: [["startTime", "DESC"]],
+    order: [["createdAt", "DESC"]],
+    limit: 10, // 🔥 last 10 activities
   });
 
-  // 3️⃣ Response
+  /** 3️⃣ Format Timesheet */
+  const timesheetHistory = statics.map((shift) => {
+    const t = shift.guards[0].StaticGuards;
+
+    return {
+      shiftId: shift.id,
+      date: shift.date,
+      startTime: shift.startTime,
+      endTime: shift.endTime,
+      shiftStatus: shift.status,
+
+      order: shift.order
+        ? {
+            serviceType: shift.order.serviceType,
+            locationName: shift.order.locationName,
+            locationAddress: shift.order.locationAddress,
+          }
+        : null,
+
+      assignmentStatus: t.status,
+
+      timesheet: {
+        clockInTime: t.clockInTime,
+        clockOutTime: t.clockOutTime,
+        totalHours: t.totalHours ?? 0,
+        overtime: {
+          startTime: t.overtimeStartTime,
+          endTime: t.overtimeEndTime,
+          hours: t.overtimeHours ?? 0,
+        },
+      },
+    };
+  });
+
+  /** 4️⃣ Response */
   res.status(StatusCodes.OK).json({
     success: true,
-    message: "Guard latest accepted static fetched successfully",
+    message: "Guard details fetched successfully",
     data: {
-      ...guard.toJSON(),
-      latestStatic: latestStatic || null,
+      guard: guard.toJSON(),
+      activity: timesheetHistory, // 🔥 last activities
     },
   });
 });
+
 
 // Fetch all clients details 
 export const getAllClients = catchAsyncError(async (req, res, next) => {
