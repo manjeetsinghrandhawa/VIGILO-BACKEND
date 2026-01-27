@@ -8,6 +8,8 @@ import { getTimeZone, toUTC } from "../../utils/timeZone.js";
 import sequelize from "../../config/database.js";
 import moment from "moment-timezone";
 import { Op } from "sequelize";
+import Static from "../shift/static.model.js";
+import StaticGuards from "../shift/staticGuards.model.js";
 
 export const createOrder = catchAsyncError(async (req, res, next) => {
   const { 
@@ -492,48 +494,84 @@ export const getUserUpcomingOrders = async (req, res, next) => {
   });
 };
 
+
+
 export const getUserOngoingOrders = async (req, res, next) => {
-  const userId = req.user?.id;
+  try {
+    const userId = req.user?.id;
 
-  if (!userId) {
-    return next(
-      new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
-    );
-  }
+    if (!userId) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: "Unauthorized access",
+      });
+    }
 
-  let { page = 1, limit = 10 } = req.query;
+    let { page = 1, limit = 10 } = req.query;
+    page = parseInt(page);
+    limit = parseInt(limit);
 
-  page = parseInt(page);
-  limit = parseInt(limit);
+    const offset = (page - 1) * limit;
 
-  if (isNaN(page) || page < 1) page = 1;
-  if (isNaN(limit) || limit < 1) limit = 10;
-
-  const offset = (page - 1) * limit;
-
-  const { count, rows: orders } = await Order.findAndCountAll({
-    where: {
-      userId,
-      status: "ongoing",
-    },
-    order: [
-      ["startDate", "ASC"],
-      ["startTime", "ASC"],
-    ],
-    limit,
-    offset,
-  });
-
-  res.status(StatusCodes.OK).json({
-    success: true,
-    message: "Ongoing orders fetched successfully",
-    data: orders,
-    pagination: {
-      total: count,
-      page,
-      totalPages: Math.ceil(count / limit),
+    const { count, rows: orders } = await Order.findAndCountAll({
+      where: {
+        userId,
+        status: "ongoing",
+      },
+      order: [
+        ["startDate", "ASC"],
+        ["startTime", "ASC"],
+      ],
       limit,
-    },
-  });
+      offset,
+
+      include: [
+        {
+          model: Static,
+          as: "statics",
+          attributes: [
+            "id",
+            "date",
+            "startTime",
+            "endTime",
+            "status",
+          ],
+          include: [
+            {
+              model: User,
+              as: "guards",
+              attributes: ["id", "name", "avatar"],
+              through: {
+                model: StaticGuards,
+                attributes: [
+                  "status",
+                  "totalHours",
+                  "clockInTime",
+                  "clockOutTime",
+                  "requestOffStatus",
+                  "changeShiftStatus"
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Ongoing orders with assigned guards fetched successfully",
+      data: orders,
+      pagination: {
+        total: count,
+        page,
+        totalPages: Math.ceil(count / limit),
+        limit,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 };
+
 
