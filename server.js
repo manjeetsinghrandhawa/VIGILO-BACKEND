@@ -8,6 +8,7 @@ import "./src/user/user.model.js";
 import "./src/incident/incident.model.js";
 import "./src/invoicing/invoicing.model.js"
 import "./src/notifications/notifications.model.js";
+import "./src/guardProfile/guardProfile.model.js"
 
 
 // 🔥 CALL ASSOCIATIONS AFTER ALL MODELS ARE LOADED

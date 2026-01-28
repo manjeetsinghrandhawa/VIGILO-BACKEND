@@ -11,6 +11,7 @@ import incidentRoute from "./src/incident/incident.router.js";
 import schedulingRoute from "./src/scheduling/scheduling.router.js";
 import invoicingRoute from "./src/invoicing/invoicing.router.js";
 import notifications from "./src/notifications/notifications.router.js";
+import guardProfileRoute from "./src/guardProfile/guardProfile.router.js";
 
 dotenv.config({ path: "./config/.env" });
 
@@ -33,6 +34,7 @@ app.use("/api/v1/incidents", incidentRoute);
 app.use("/api/v1/scheduling", schedulingRoute);
 app.use("/api/v1/invoicing", invoicingRoute);
 app.use("/api/v1/notifications", notifications);
+app.use("/api/v1/guardProfile",guardProfileRoute);
 
 app.get("/", (req, res) => res.json({ anc: "abc" }));
 
