@@ -575,3 +575,33 @@ export const getUserOngoingOrders = async (req, res, next) => {
 };
 
 
+export const getRequestedOrders = async (req, res, next) => {
+  try {
+    const userId = req.user.id; // logged-in client
+
+    const orders = await Order.findAll({
+      where: {
+        userId,
+        status: "pending",
+      },
+      order: [["createdAt", "DESC"]],
+    });
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      count: orders.length,
+      data: orders,
+    });
+  } catch (error) {
+    console.error("Get Requested Orders error:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to get requested orders",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+
+
