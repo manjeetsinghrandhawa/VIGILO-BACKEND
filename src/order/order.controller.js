@@ -11,6 +11,7 @@ import { Op } from "sequelize";
 import Static from "../shift/static.model.js";
 import StaticGuards from "../shift/staticGuards.model.js";
 
+
 export const createOrder = catchAsyncError(async (req, res, next) => {
   const { 
     serviceType, 
@@ -146,21 +147,61 @@ export const getUserOrders = catchAsyncError(async (req, res, next) => {
   });
 });
 
-export const getOrderById = catchAsyncError(async (req, res, next) => {
-  const { id } = req.params;
-  const order = await Order.findByPk(id);
-  if(!order){
-    return next(
-      new ErrorHandler("Order not found", StatusCodes.NOT_FOUND)
-    );
-  }
+export const getOrderById = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const userId = req.user.id;
 
-  res.status(StatusCodes.OK).json({
-    success: true,
-    message: "Order fetched successfully",
-    data: order,
-  })
-});
+    const order = await Order.findOne(orderId,{
+      where: {
+        userId,
+      },
+      include: [
+        {
+          model: Static,
+          as: "statics",
+          attributes: [
+            "id",
+            "date",
+            "startTime",
+            "endTime",
+            "status",
+          ],
+          include: [
+            {
+              model: User,
+              as: "guards",
+              attributes: ["id", "name", "avatar"],
+              through: {
+                model: StaticGuards,
+                attributes: [
+                  "status",
+                  "totalHours",
+                  "clockInTime",
+                  "clockOutTime",
+                  "requestOffStatus",
+                  "changeShiftStatus"
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: order,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 export const cancelOrder = catchAsyncError(async (req, res, next) => {
   const { id } = req.params;
@@ -602,6 +643,63 @@ export const getRequestedOrders = async (req, res, next) => {
     );
   }
 };
+
+export const getOrderHistory = async (req, res, next) => {
+  try {
+    const userId = req.user.id; // logged-in user
+
+    const orders = await Order.findAll({
+      where: {
+        userId,
+        status: {
+          [Op.in]: ["completed", "cancelled","missed", "order_missed","ongoing"],
+        },
+      },
+      order: [["updatedAt", "DESC"]],
+
+      include: [
+        {
+          model: Static,
+          as: "statics",
+          attributes: [
+            "id",
+            "date",
+            "startTime",
+            "endTime",
+            "status",
+          ],
+          include: [
+            {
+              model: User,
+              as: "guards",
+              attributes: ["id", "name", "avatar"],
+              through: {
+                model: StaticGuards,
+                attributes: [
+                  "status",
+                  "totalHours",
+                  "clockInTime",
+                  "clockOutTime",
+                  "requestOffStatus",
+                  "changeShiftStatus"
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      count: orders.length,
+      data: orders,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 
 
