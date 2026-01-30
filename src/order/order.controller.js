@@ -149,13 +149,15 @@ export const getUserOrders = catchAsyncError(async (req, res, next) => {
 
 export const getOrderById = async (req, res, next) => {
   try {
-    const { orderId } = req.params;
+    const { id } = req.params;
     const userId = req.user.id;
 
-    const order = await Order.findOne(orderId,{
+    const order = await Order.findOne({
       where: {
-        userId,
+        id: id,
+        userId: userId, // 🔐 ownership check
       },
+      
       include: [
         {
           model: Static,
