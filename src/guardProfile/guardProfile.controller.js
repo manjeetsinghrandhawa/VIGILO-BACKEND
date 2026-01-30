@@ -182,3 +182,64 @@ export const saveGuardBankDetails = async (req, res, next) => {
   }
 };
 
+export const getGuardProfile = async (req, res, next) => {
+  try {
+    const userId = req.user.id; // logged-in guard
+
+    const profile = await GuardProfile.findOne({
+      where: { userId },
+    });
+
+    if (!profile) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Employee profile not found",
+      });
+    }
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: profile,
+    });
+  } catch (error) {
+    console.error("Get guard profile error:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to fetch employee profile",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+export const getGuardBankDetails = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const bankDetails = await GuardBankDetails.findOne({
+      where: { userId },
+    });
+
+    if (!bankDetails) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Bank details not found",
+      });
+    }
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: bankDetails,
+    });
+  } catch (error) {
+    console.error("Get guard bank details error:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to fetch bank details",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+
