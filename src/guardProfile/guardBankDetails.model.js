@@ -28,7 +28,7 @@ const GuardBankDetails = sequelize.define(
 
     bankName: {
       type: DataTypes.STRING,
-      allowNull: false,
+      
     },
 
     accountNumber: {
@@ -42,7 +42,7 @@ const GuardBankDetails = sequelize.define(
 
     ifscCode: {
       type: DataTypes.STRING,
-      allowNull: false,
+     
     },
 
     branchName: {
