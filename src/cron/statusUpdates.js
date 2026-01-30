@@ -21,6 +21,9 @@ const buildDateTime = (date, time, tz) => {
   );
 };
 
+let orderCronRunning = false;
+let shiftCronRunning = false;
+
 const updateOrderStatuses = async () => {
   try {
     const tz = getTimeZone(); // 👈 e.g. "Asia/Kolkata"
@@ -32,6 +35,7 @@ const updateOrderStatuses = async () => {
           [Op.in]: ["pending", "upcoming", "ongoing"],
         },
       },
+      limit: 50, 
     });
 
     let updatedCount = 0;
@@ -123,6 +127,7 @@ cron.schedule("*/1 * * * *", async () => {
           [Op.in]: ["pending","upcoming", "ongoing","overtime_started"],
         },
       },
+      limit: 30,
       include: [
         {
           model: User,

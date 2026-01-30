@@ -19,6 +19,12 @@ const sequelize = new Sequelize(
     },
      logging: false, 
        timezone: "+00:00",
+      pool: {
+      max: 15,        // ⬅️ VERY IMPORTANT
+      min: 0,
+      acquire: 60000, // ⬅️ prevent timeout
+      idle: 10000,
+    },
   }
 );
 
