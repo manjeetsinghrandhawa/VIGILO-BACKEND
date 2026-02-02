@@ -326,4 +326,80 @@ export const getPrivacyPolicy = async (req, res, next) => {
   }
 };
 
+export const saveTaxDeclaration = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const {
+      hasTFN,
+      tfnNumber,
+      changedNameSinceLastTFN,
+      isAustralianResident,
+      claimTaxFreeThreshold,
+      hasStudentLoan,
+      paymentBasis,
+    } = req.body;
+
+    // 🔒 Validate all required fields
+    if (
+      hasTFN === undefined ||
+      !tfnNumber ||
+      changedNameSinceLastTFN === undefined ||
+      isAustralianResident === undefined ||
+      claimTaxFreeThreshold === undefined ||
+      hasStudentLoan === undefined ||
+      !paymentBasis
+    ) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "All tax declaration fields are required",
+      });
+    }
+
+    const [taxDeclaration, created] =
+      await GuardTaxDeclaration.findOrCreate({
+        where: { userId },
+        defaults: {
+          userId,
+          hasTFN,
+          tfnNumber,
+          changedNameSinceLastTFN,
+          isAustralianResident,
+          claimTaxFreeThreshold,
+          hasStudentLoan,
+          paymentBasis,
+          isVerified: true, // 👈 verified because all fields exist
+        },
+      });
+
+    if (!created) {
+      await taxDeclaration.update({
+        hasTFN,
+        tfnNumber,
+        changedNameSinceLastTFN,
+        isAustralianResident,
+        claimTaxFreeThreshold,
+        hasStudentLoan,
+        paymentBasis,
+        isVerified: true,
+      });
+    }
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Tax declaration saved successfully",
+      data: taxDeclaration,
+    });
+  } catch (error) {
+    console.error("Save tax declaration error:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to save tax declaration",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+
 

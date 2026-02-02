@@ -1,6 +1,6 @@
 import express from "express";
 import { auth, isGaurd, isAdmin } from "../../middlewares/auth.js";
-import { saveGuardProfile,saveGuardBankDetails,getGuardProfile, getGuardBankDetails,getTermsAndConditions,getPrivacyPolicy } from "./guardProfile.controller.js";
+import { saveGuardProfile,saveGuardBankDetails,getGuardProfile, getGuardBankDetails,getTermsAndConditions,getPrivacyPolicy,saveTaxDeclaration } from "./guardProfile.controller.js";
 
 
 const router = express.Router();
@@ -15,5 +15,7 @@ router.get("/getGuardBankDetails", auth, isGaurd, getGuardBankDetails);
 
 router.get("/getTermsAndConditions", getTermsAndConditions);
 
-router.get("/getPrivacyPolicy",getPrivacyPolicy)
+router.get("/getPrivacyPolicy",getPrivacyPolicy);
+
+router.post("/saveTaxDeclaration", auth, isGaurd, saveTaxDeclaration);
 export default router;
