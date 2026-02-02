@@ -402,5 +402,35 @@ export const saveTaxDeclaration = async (req, res, next) => {
   }
 };
 
+export const getTaxDeclaration = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const taxDeclaration = await GuardTaxDeclaration.findOne({
+      where: { userId },
+    });
+
+    if (!taxDeclaration) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Tax declaration not found",
+      });
+    }
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: taxDeclaration,
+    });
+  } catch (error) {
+    console.error("Get tax declaration error:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to fetch tax declaration",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
 
 
