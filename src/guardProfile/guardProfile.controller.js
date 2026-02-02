@@ -2,6 +2,7 @@ import GuardProfile from "./guardProfile.model.js";
 import { StatusCodes } from "http-status-codes";
 import ErrorHandler from "../../utils/errorHandler.js";
 import GuardBankDetails from "./guardBankDetails.model.js";
+import GuardTaxDeclaration from "./taxDeclaration.model.js";
 
 export const saveGuardProfile = async (req, res, next) => {
   try {
