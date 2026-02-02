@@ -746,6 +746,7 @@ export const getMyOrdersByDate = async (req, res, next) => {
       locationName: order.locationName,
       locationAddress: order.locationAddress,
       guardsRequired: order.guardsRequired,
+      status: order.status,
       description: order.description,
       startDate: moment(order.startDate).tz(tz).format("YYYY-MM-DD"),
       endDate: order.endDate
