@@ -242,4 +242,88 @@ export const getGuardBankDetails = async (req, res, next) => {
   }
 };
 
+export const getTermsAndConditions = async (req, res, next) => {
+  try {
+    const htmlContent = `
+      <h2>Solid Cad Security</h2>
+      <h3>Terms & Conditions</h3>
+
+      <p>
+        Welcome to Solid Cad Security. By accessing or using our application,
+        you agree to be bound by these Terms & Conditions.
+      </p>
+
+      <p>
+        All guards and administrators must comply with company policies,
+        operational guidelines, and legal requirements.
+      </p>
+
+      <p>
+        Any misuse of the platform, falsification of attendance, or violation
+        of security protocols may result in account suspension or termination.
+      </p>
+
+      <p>
+        Solid Cad Security reserves the right to modify these terms at any time
+        without prior notice.
+      </p>
+    `;
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      html: htmlContent,
+    });
+  } catch (error) {
+    console.error("Get terms error:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to fetch terms & conditions",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+export const getPrivacyPolicy = async (req, res, next) => {
+  try {
+    const htmlContent = `
+      <h2>Solid Cad Security</h2>
+      <h3>Privacy Policy</h3>
+
+      <p>
+        Your privacy is important to us. This policy explains how we collect,
+        use, and protect your personal information.
+      </p>
+
+      <p>
+        We collect data such as name, contact details, attendance logs, and
+        location data strictly for operational and security purposes.
+      </p>
+
+      <p>
+        Your information is stored securely and is never shared with third
+        parties without legal obligation.
+      </p>
+
+      <p>
+        By using our services, you consent to the practices described in this
+        Privacy Policy.
+      </p>
+    `;
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      html: htmlContent,
+    });
+  } catch (error) {
+    console.error("Get privacy policy error:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to fetch privacy policy",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
 
