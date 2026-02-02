@@ -702,6 +702,78 @@ export const getOrderHistory = async (req, res, next) => {
   }
 };
 
+export const getMyOrdersByDate = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
+
+    const { date } = req.body;
+
+    if (!date) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Date is required (YYYY-MM-DD)",
+      });
+    }
+
+    const tz = getTimeZone();
+
+    // 🔥 Create full day range
+    const startOfDay = moment.tz(date, tz).startOf("day").toDate();
+    const endOfDay = moment.tz(date, tz).endOf("day").toDate();
+
+    const orders = await Order.findAll({
+      where: {
+        userId,
+        startDate: {
+          [Op.lte]: endOfDay,
+        },
+        endDate: {
+          [Op.gte]: startOfDay,
+        },
+      },
+      order: [["startDate", "ASC"]],
+    });
+
+    const response = orders.map((order) => ({
+      id: order.id,
+      serviceType: order.serviceType,
+      locationName: order.locationName,
+      locationAddress: order.locationAddress,
+      guardsRequired: order.guardsRequired,
+      description: order.description,
+      startDate: moment(order.startDate).tz(tz).format("YYYY-MM-DD"),
+      endDate: order.endDate
+        ? moment(order.endDate).tz(tz).format("YYYY-MM-DD")
+        : null,
+      startTime: order.startTime,
+      endTime: order.endTime,
+      images: order.images || [],
+      createdAt: order.createdAt,
+    }));
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Orders fetched successfully for selected date",
+      date,
+      count: response.length,
+      data: response,
+    });
+  } catch (error) {
+    console.error("GET MY ORDERS BY DATE ERROR:", error.stack || error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
 
 
 
