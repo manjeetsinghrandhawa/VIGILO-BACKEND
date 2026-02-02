@@ -3,6 +3,7 @@ import { StatusCodes } from "http-status-codes";
 import ErrorHandler from "../../utils/errorHandler.js";
 import GuardBankDetails from "./guardBankDetails.model.js";
 import GuardTaxDeclaration from "./taxDeclaration.model.js";
+import GuardSuperNomination from "./superNomination.model.js";
 
 export const saveGuardProfile = async (req, res, next) => {
   try {
@@ -431,6 +432,87 @@ export const getTaxDeclaration = async (req, res, next) => {
     );
   }
 };
+
+export const saveSuperNomination = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const [superNomination, created] =
+      await GuardSuperNomination.findOrCreate({
+        where: { userId },
+        defaults: {
+          userId,
+          isVerified: true, // ✅ Continue clicked
+        },
+      });
+
+    if (!created) {
+      await superNomination.update({
+        isVerified: true,
+      });
+    }
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Super nomination acknowledged successfully",
+    });
+  } catch (error) {
+    console.error("Save super nomination error:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to save super nomination",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+export const getSuperNominationContent = async (req, res, next) => {
+  try {
+    const htmlContent = `
+      <h2>Solid Cad Security</h2>
+      <h3>Superannuation Nomination</h3>
+
+      <p>
+        Superannuation is an important part of your employment benefits.
+        By proceeding, you acknowledge that your employer will make
+        superannuation contributions on your behalf.
+      </p>
+
+      <p>
+        If you do not nominate a specific super fund, contributions may
+        be paid into the company’s default superannuation fund in
+        accordance with Australian law.
+      </p>
+
+      <p>
+        You confirm that the information you have provided during your
+        onboarding process is accurate and complete to the best of
+        your knowledge.
+      </p>
+
+      <p>
+        By clicking <strong>Continue</strong>, you acknowledge and accept
+        the superannuation arrangements applicable to your employment.
+      </p>
+    `;
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      html: htmlContent,
+    });
+  } catch (error) {
+    console.error("Get super nomination content error:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to fetch super nomination content",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+
 
 
 
