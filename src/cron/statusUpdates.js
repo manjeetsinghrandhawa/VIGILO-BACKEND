@@ -3,7 +3,6 @@ import moment from "moment-timezone";
 import { Op } from "sequelize";
 import Order from "../order/order.model.js";
 import Static from "../shift/static.model.js";
-import StaticGuards from "../shift/staticGuards.model.js";
 import User from "../user/user.model.js";
 import { getTimeZone } from "../../utils/timeZone.js";
 import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
@@ -21,10 +20,16 @@ const buildDateTime = (date, time, tz) => {
   );
 };
 
-let orderCronRunning = false;
 let shiftCronRunning = false;
+let isCronRunning = false;
 
 const updateOrderStatuses = async () => {
+   if (isCronRunning) {
+    console.log("⏳ Cron already running, skipping...");
+    return;
+  }
+
+  isCronRunning = true;
   try {
     const tz = getTimeZone(); // 👈 e.g. "Asia/Kolkata"
     const now = moment().tz(tz);
@@ -101,6 +106,10 @@ const updateOrderStatuses = async () => {
   } catch (error) {
     console.error("❌ ORDER STATUS CRON ERROR:", error);
   }
+  finally {
+    isCronRunning = false;
+    console.log("✅ Order status cron finished");
+  }
 };
 
 /**
@@ -116,6 +125,12 @@ cron.schedule(
   }
 );
 cron.schedule("*/1 * * * *", async () => {
+   if (shiftCronRunning) {
+    console.log("⏳ Shift cron already running, skipped");
+    return;
+  }
+
+  shiftCronRunning = true;
   try {
     const tz = getTimeZone();
     const now = moment().tz(tz);
@@ -270,8 +285,13 @@ if (
 }
       }
     }
+    console.log(`✅ Shift status cron updated shifts`);
   } catch (error) {
     console.error("ABSENT CRON ERROR:", error);
+  }
+  finally {
+    shiftCronRunning = false;
+    console.log("✅ Shift status cron finished");
   }
 });
 
