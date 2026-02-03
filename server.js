@@ -10,6 +10,9 @@ import "./src/invoicing/invoicing.model.js"
 import "./src/notifications/notifications.model.js";
 import "./src/guardProfile/guardProfile.model.js"
 import "./src/shift/staticGuards.model.js";
+import "./src/patrolling/patrolSite.model.js";
+import "./src/patrolling/patrolSubSite.model.js"
+import "./src/patrolling/patrolCheckpoint.model.js";
 
 
 // 🔥 CALL ASSOCIATIONS AFTER ALL MODELS ARE LOADED
