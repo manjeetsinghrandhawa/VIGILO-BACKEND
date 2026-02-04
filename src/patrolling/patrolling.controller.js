@@ -135,3 +135,106 @@ export const createPatrolSubSite = async (req, res, next) => {
   }
 };
 
+export const getAllPatrolSites = async (req, res, next) => {
+  try {
+    const sites = await PatrolSite.findAll({
+      include: [
+        {
+          model: PatrolSubSite,
+          as: "subSites",
+        },
+        {
+          model: User,
+          as: "client",
+          attributes: ["id", "name", "email"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: sites,
+    });
+  } catch (error) {
+    console.error("GET PATROL SITES ERROR:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to fetch patrol sites",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+export const getPatrolSiteById = async (req, res, next) => {
+  try {
+    const { siteId } = req.params;
+
+    const site = await PatrolSite.findByPk(siteId, {
+      include: [
+        {
+          model: PatrolSubSite,
+          as: "subSites",
+        },
+        {
+          model: User,
+          as: "client",
+          attributes: ["id", "name", "email"],
+        },
+      ],
+    });
+
+    if (!site) {
+      return next(
+        new ErrorHandler("Patrol site not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: site,
+    });
+  } catch (error) {
+    console.error("GET PATROL SITE ERROR:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to fetch patrol site",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+export const getSubSitesBySiteId = async (req, res, next) => {
+  try {
+    const { siteId } = req.params;
+
+    const site = await PatrolSite.findByPk(siteId);
+
+    if (!site) {
+      return next(
+        new ErrorHandler("Patrol site not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    const subSites = await PatrolSubSite.findAll({
+      where: { siteId },
+      order: [["createdAt", "ASC"]],
+    });
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: subSites,
+    });
+  } catch (error) {
+    console.error("GET SUB SITES ERROR:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to fetch sub-sites",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
