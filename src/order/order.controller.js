@@ -308,6 +308,8 @@ export const getAllOrders = catchAsyncError(async (req, res, next) => {
     "ongoing",
     "completed",
     "cancelled",
+    "missed",
+    "order_missed",
   ];
 
   const allowedServiceTypes = [
