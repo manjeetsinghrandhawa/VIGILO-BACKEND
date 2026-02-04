@@ -28,138 +28,222 @@ export const createSchedule = async (req, res, next) => {
       orderId,
     } = req.body;
 
+    // =========================
+    // 🔒 VALIDATIONS
+    // =========================
     if (!orderId) {
-      return next(new ErrorHandler("Order ID is required", StatusCodes.BAD_REQUEST));
+      return next(
+        new ErrorHandler("Order ID is required", StatusCodes.BAD_REQUEST)
+      );
     }
 
     if (!startTime || !endTime) {
       return next(
-        new ErrorHandler("Start time and end time are required", StatusCodes.BAD_REQUEST)
+        new ErrorHandler(
+          "Start time and end time are required",
+          StatusCodes.BAD_REQUEST
+        )
       );
     }
 
     if (!Array.isArray(guardIds) || guardIds.length === 0) {
       return next(
-        new ErrorHandler("At least one guard must be assigned", StatusCodes.BAD_REQUEST)
+        new ErrorHandler(
+          "At least one guard must be assigned",
+          StatusCodes.BAD_REQUEST
+        )
       );
     }
 
     const order = await Order.findByPk(orderId);
     if (!order) {
-      return next(new ErrorHandler("Order not found", StatusCodes.NOT_FOUND));
+      return next(
+        new ErrorHandler("Order not found", StatusCodes.NOT_FOUND)
+      );
     }
 
     const guards = await User.findAll({ where: { id: guardIds } });
     if (guards.length !== guardIds.length) {
       return next(
-        new ErrorHandler("One or more guard IDs are invalid", StatusCodes.BAD_REQUEST)
+        new ErrorHandler(
+          "One or more guard IDs are invalid",
+          StatusCodes.BAD_REQUEST
+        )
       );
     }
 
+    // =========================
+    // 🕒 DATE & TIME SETUP
+    // =========================
     const tz = getTimeZone();
+    const today = moment().tz(tz);
 
-    /** 📅 Normalize dates */
-    const normalizedStartDate = moment(date).format("YYYY-MM-DD");
-    const normalizedEndDate = endDate
-      ? moment(endDate).format("YYYY-MM-DD")
-      : normalizedStartDate;
+    const startDate = moment(date).tz(tz).startOf("day");
+    const finalEndDate = endDate
+      ? moment(endDate).tz(tz).startOf("day")
+      : startDate.clone();
 
-    /** 🕒 Build datetime */
-    const start = moment
-      .tz(`${normalizedStartDate} ${startTime}`, "YYYY-MM-DD HH:mm", tz)
-      .utc()
-      .toDate();
+    const isSameDay = startDate.isSame(finalEndDate, "day");
 
-    const end = moment
-      .tz(`${normalizedEndDate} ${endTime}`, "YYYY-MM-DD HH:mm", tz)
-      .utc()
-      .toDate();
+    const createdShifts = [];
 
-    /** 🧠 STATUS DECISION LOGIC */
-    const today = moment().tz(tz).startOf("day");
-    const startDay = moment(normalizedStartDate).startOf("day");
-    const endDay = moment(normalizedEndDate).endOf("day");
+    // =========================
+    // 🔹 SAME DAY SHIFT
+    // =========================
+    if (isSameDay) {
+      let shiftStart = moment.tz(
+        `${startDate.format("YYYY-MM-DD")} ${startTime}`,
+        "YYYY-MM-DD HH:mm",
+        tz
+      );
 
-    let shiftStatus = "pending";
-    let guardStatus = "pending";
+      let shiftEnd = moment.tz(
+        `${startDate.format("YYYY-MM-DD")} ${endTime}`,
+        "YYYY-MM-DD HH:mm",
+        tz
+      );
 
-    if (today.isAfter(endDay)) {
-      shiftStatus = "completed";
-      guardStatus = "completed";
-    } 
+      // 🌙 Overnight shift
+      if (shiftEnd.isBefore(shiftStart)) {
+        shiftEnd.add(1, "day");
+      }
 
-    /** 🏗️ CREATE SHIFT */
-    const staticShift = await Static.create({
-      orderId,
-      description,
-      date: normalizedStartDate,
-      endDate: normalizedEndDate,
-      startTime: start,
-      endTime: end,
-      type: "static",
-      status: shiftStatus,
-    });
+      const shiftStatus = today.isAfter(shiftEnd)
+        ? "completed"
+        : "pending";
 
-    /** 👮 ASSIGN GUARDS */
-    const guardAssignments = guardIds.map((guardId) => ({
-      staticId: staticShift.id,
-      guardId,
-      status: guardStatus,
-    }));
+      const shift = await Static.create({
+        orderId,
+        description,
+        date: currentDay.format("YYYY-MM-DD"),
+        endDate: startDate.format("YYYY-MM-DD"),
+        startTime: shiftStart.utc().toDate(),
+        endTime: shiftEnd.utc().toDate(),
+        type: "static",
+        status: shiftStatus,
+      });
 
-    await StaticGuards.bulkCreate(guardAssignments);
+      await StaticGuards.bulkCreate(
+        guardIds.map((guardId) => ({
+          staticId: shift.id,
+          guardId,
+          status: shiftStatus,
+        }))
+      );
 
-    /** 📦 FETCH SHIFT */
-    const createdShift = await Static.findByPk(staticShift.id, {
+      createdShifts.push(shift);
+    }
+
+    // =========================
+    // 🔹 MULTI DAY SHIFT
+    // =========================
+    else {
+      let currentDay = startDate.clone();
+
+      while (currentDay.isSameOrBefore(finalEndDate)) {
+        let shiftStart = moment.tz(
+          `${currentDay.format("YYYY-MM-DD")} ${startTime}`,
+          "YYYY-MM-DD HH:mm",
+          tz
+        );
+
+        let shiftEnd = moment.tz(
+          `${currentDay.format("YYYY-MM-DD")} ${endTime}`,
+          "YYYY-MM-DD HH:mm",
+          tz
+        );
+
+        // 🌙 Overnight shift
+        if (shiftEnd.isBefore(shiftStart)) {
+          shiftEnd.add(1, "day");
+        }
+
+        const shiftStatus = today.isAfter(shiftEnd)
+          ? "completed"
+          : "pending";
+
+        const shift = await Static.create({
+          orderId,
+          description,
+          date: currentDay.format("YYYY-MM-DD"),
+          endDate: currentDay.format("YYYY-MM-DD"),
+          startTime: shiftStart.utc().toDate(),
+          endTime: shiftEnd.utc().toDate(),
+          type: "static",
+          status: shiftStatus,
+        });
+
+        await StaticGuards.bulkCreate(
+          guardIds.map((guardId) => ({
+            staticId: shift.id,
+            guardId,
+            status: shiftStatus,
+          }))
+        );
+
+        createdShifts.push(shift);
+        currentDay.add(1, "day");
+      }
+    }
+
+    // =========================
+    // 📦 FETCH CREATED SHIFTS
+    // =========================
+    const populatedShifts = await Static.findAll({
+      where: {
+        id: createdShifts.map((s) => s.id),
+      },
+      order: [["date", "ASC"]],
       include: [
         {
           model: User,
           as: "guards",
           attributes: ["id", "name", "email"],
-          through: { attributes: ["status", "createdAt"] },
+          through: {
+            attributes: ["status", "createdAt"],
+          },
         },
       ],
     });
 
-    /**
-     * 🔔 NOTIFICATIONS
-     */
-    const notificationsPayload = guardIds.map((guardId) => ({
+    // =========================
+    // 🔔 NOTIFICATIONS
+    // =========================
+    const notifications = guardIds.map((guardId) => ({
       userId: guardId,
       role: "guard",
       title: "New Shift Assigned",
-      message: `A new shift has been assigned to you from ${startTime} to ${endTime} on ${normalizedStartDate}${
-        endDate ? ` till ${normalizedEndDate}` : ""
-      }.`,
+      message: `You have been assigned a shift from ${startTime} to ${endTime} between ${startDate.format(
+        "DD MMM YYYY"
+      )} and ${finalEndDate.format("DD MMM YYYY")}.`,
       type: "SHIFT_ASSIGNED",
       data: {
-        shiftId: staticShift.id,
         orderId,
-        // ✅ ADD LOCATION HERE
-    locationName: order.locationName,
-    locationAddress: order.locationAddress,
         startTime,
         endTime,
-        startDate: normalizedStartDate,
-        endDate: normalizedEndDate,
+        startDate: startDate.format("YYYY-MM-DD"),
+        endDate: finalEndDate.format("YYYY-MM-DD"),
       },
     }));
 
-    await Notification.bulkCreate(notificationsPayload);
+    await Notification.bulkCreate(notifications);
 
-
+    // =========================
+    // ✅ RESPONSE
+    // =========================
     return res.status(StatusCodes.CREATED).json({
       success: true,
       message: "Shift assigned successfully",
-      data: createdShift,
+      data: populatedShifts,
     });
   } catch (error) {
     console.error("CREATE SCHEDULE ERROR:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    });
+    return next(
+      new ErrorHandler(
+        "Internal server error",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
   }
 };
 
