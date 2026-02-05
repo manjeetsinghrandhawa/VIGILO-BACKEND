@@ -1,5 +1,5 @@
 import express from "express";
-import { registerUser, verifyRegisterEmail,deleteClient,createGuardByAdmin, resendOtp, userLogin, registerAdmin, forgotPassword, verifyForgotPasswordOtp, resendForgotPasswordOtp, setNewPassword, registerGaurd, getProfile, editProfile, deleteProfile, getAllGuards, getGuardById,getAllClients, editClient, getClientById,editGuard } from "./user.controller.js";
+import { registerUser, verifyRegisterEmail,deleteClient,createGuardByAdmin, resendOtp, userLogin, registerAdmin, forgotPassword, verifyForgotPasswordOtp, resendForgotPasswordOtp, setNewPassword, registerGaurd, getProfile, editProfile, deleteProfile, getAllGuards, getGuardById,getAllClients, editClient, getClientById,editGuard, updateGuardNotificationPreference, getGuardNotificationPreference } from "./user.controller.js";
 import { auth, isAdmin } from "../../middlewares/auth.js";
 
 const route = express.Router();
@@ -19,6 +19,8 @@ route.post("/set-newPassword", setNewPassword);
 route.get("/get-profile",auth, getProfile );
 route.put("/edit-profile",auth, editProfile );
 route.delete("/delete-profile",auth, deleteProfile );
+route.post("/updateGuardNotificationPreference", auth, updateGuardNotificationPreference);
+route.get("/getGuardNotificationPreference", auth, getGuardNotificationPreference);
 
 route.get("/getAllGuards",auth,isAdmin, getAllGuards );
 route.get("/getGuardById/:id",auth,isAdmin, getGuardById );

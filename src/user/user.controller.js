@@ -963,3 +963,66 @@ export const editGuard = async (req, res, next) => {
   });
 };
 
+export const updateGuardNotificationPreference = async (req, res, next) => {
+  try {
+    const userId = req.userId;
+    const { enabled } = req.body;
+
+    if (typeof enabled !== "boolean") {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "enabled must be a boolean value",
+      });
+    }
+
+    await userModel.update(
+      { notificationsEnabled: enabled },
+      { where: { id: userId } }
+    );
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: enabled
+        ? "Notifications enabled successfully"
+        : "Notifications disabled successfully",
+      data: {
+        notificationsEnabled: enabled,
+      },
+    });
+  } catch (error) {
+    console.error("Update notification preference error:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to update notification preference",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+export const getGuardNotificationPreference = async (req, res, next) => {
+  try {
+    const userId = req.userId;
+
+    const user = await userModel.findByPk(userId, {
+      attributes: ["notificationsEnabled"],
+    });
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        notificationsEnabled: user?.notificationsEnabled ?? true,
+      },
+    });
+  } catch (error) {
+    console.error("Get notification preference error:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to fetch notification preference",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+
