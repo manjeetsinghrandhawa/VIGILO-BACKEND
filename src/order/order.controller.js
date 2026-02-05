@@ -733,9 +733,8 @@ export const getMyOrdersByDate = async (req, res, next) => {
       where: {
         userId,
         startDate: {
-          [Op.lte]: endOfDay,
+          [Op.between]: [startOfDay, endOfDay], // ✅ KEY FIX
         },
-        
       },
       order: [["startDate", "ASC"]],
     });
