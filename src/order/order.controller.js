@@ -735,9 +735,7 @@ export const getMyOrdersByDate = async (req, res, next) => {
         startDate: {
           [Op.lte]: endOfDay,
         },
-        endDate: {
-          [Op.gte]: startOfDay,
-        },
+        
       },
       order: [["startDate", "ASC"]],
     });
