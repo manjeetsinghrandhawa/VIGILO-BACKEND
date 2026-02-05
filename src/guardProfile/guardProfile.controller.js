@@ -512,6 +512,68 @@ export const getSuperNominationContent = async (req, res, next) => {
   }
 };
 
+export const getGuardOnboardingStatus = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    // Fetch all records in parallel
+    const [
+      profile,
+      bankDetails,
+      taxDeclaration,
+      superNomination,
+    ] = await Promise.all([
+      GuardProfile.findOne({
+        where: { userId },
+        attributes: ["profileCompleted"],
+      }),
+      GuardBankDetails.findOne({
+        where: { userId },
+        attributes: ["isVerified"],
+      }),
+      GuardTaxDeclaration.findOne({
+        where: { userId },
+        attributes: ["isVerified"],
+      }),
+      GuardSuperNomination.findOne({
+        where: { userId },
+        attributes: ["isVerified"],
+      }),
+    ]);
+
+    const response = {
+      profileCompleted: !!profile?.profileCompleted,
+      bankDetailsVerified: !!bankDetails?.isVerified,
+      taxDeclarationVerified: !!taxDeclaration?.isVerified,
+      superNominationVerified: !!superNomination?.isVerified,
+    };
+
+    // Optional: overall completion flag (VERY useful for UI)
+    const allCompleted =
+      response.profileCompleted &&
+      response.bankDetailsVerified &&
+      response.taxDeclarationVerified &&
+      response.superNominationVerified;
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        ...response,
+        allCompleted,
+      },
+    });
+  } catch (error) {
+    console.error("Get guard onboarding status error:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to fetch guard onboarding status",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+
 
 
 
