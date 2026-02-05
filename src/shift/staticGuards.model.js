@@ -37,6 +37,7 @@ const StaticGuards = sequelize.define(
         "absent",
         "pending",
         "accepted",
+        "upcoming",
         "rejected",
         "ongoing",
         "completed",

@@ -115,7 +115,7 @@ export const createSchedule = async (req, res, next) => {
       const shift = await Static.create({
         orderId,
         description,
-        date: currentDay.format("YYYY-MM-DD"),
+        date: startDate.format("YYYY-MM-DD"),
         endDate: startDate.format("YYYY-MM-DD"),
         startTime: shiftStart.utc().toDate(),
         endTime: shiftEnd.utc().toDate(),
@@ -250,18 +250,17 @@ export const createSchedule = async (req, res, next) => {
 
 export const editSchedule = async (req, res, next) => {
   try {
-    const { id } = req.params; // schedule ID
+    const { id } = req.params;
 
     const {
       description,
       startTime,
       endTime,
-      date,       // start date
-      endDate,    // end date
+      date,
+      endDate,
       guardIds,
     } = req.body;
 
-    // 🔎 Fetch existing schedule
     const staticShift = await Static.findByPk(id);
 
     if (!staticShift) {
@@ -277,11 +276,11 @@ export const editSchedule = async (req, res, next) => {
      */
     const normalizedStartDate = date
       ? moment(date).format("YYYY-MM-DD")
-      : moment.utc(staticShift.startTime).tz(tz).format("YYYY-MM-DD");
+      : moment(staticShift.startTime).tz(tz).format("YYYY-MM-DD");
 
     const normalizedEndDate = endDate
       ? moment(endDate).format("YYYY-MM-DD")
-      : moment.utc(staticShift.endTime).tz(tz).format("YYYY-MM-DD");
+      : moment(staticShift.endTime).tz(tz).format("YYYY-MM-DD");
 
     const start = startTime
       ? moment
@@ -298,7 +297,7 @@ export const editSchedule = async (req, res, next) => {
       : staticShift.endTime;
 
     /**
-     * 🏗️ UPDATE SHIFT
+     * 🏗️ UPDATE SHIFT (NO STATUS CHANGE)
      */
     await staticShift.update({
       description: description ?? staticShift.description,
@@ -306,52 +305,89 @@ export const editSchedule = async (req, res, next) => {
       endTime: end,
     });
 
-    /**
-     * 👮 UPDATE GUARDS (if provided)
-     */
-    if (Array.isArray(guardIds)) {
-      // Validate guards
-      const guards = await User.findAll({ where: { id: guardIds } });
-      if (guards.length !== guardIds.length) {
-        return next(
-          new ErrorHandler("One or more guard IDs are invalid", StatusCodes.BAD_REQUEST)
-        );
-      }
+   if (Array.isArray(guardIds)) {
+  // 1️⃣ Validate guards
+  const guards = await User.findAll({ where: { id: guardIds } });
 
-      // Remove old assignments
-      await StaticGuards.destroy({
-        where: { staticId: staticShift.id },
-      });
+  if (guards.length !== guardIds.length) {
+    return next(
+      new ErrorHandler(
+        "One or more guard IDs are invalid",
+        StatusCodes.BAD_REQUEST
+      )
+    );
+  }
 
-      // Add new assignments
-      const guardAssignments = guardIds.map((guardId) => ({
+  // 2️⃣ Fetch existing assignments
+  const existingAssignments = await StaticGuards.findAll({
+    where: { staticId: staticShift.id },
+  });
+
+  const existingGuardMap = new Map(
+    existingAssignments.map(a => [a.guardId, a])
+  );
+
+  const incomingGuardSet = new Set(guardIds);
+
+  const toCreate = [];
+  const toKeep = [];
+  const toRemove = [];
+
+  // 3️⃣ Identify NEW & EXISTING guards
+  for (const guardId of guardIds) {
+    if (existingGuardMap.has(guardId)) {
+      toKeep.push(existingGuardMap.get(guardId));
+    } else {
+      toCreate.push({
         staticId: staticShift.id,
         guardId,
-        status: "pending",
-      }));
-
-      await StaticGuards.bulkCreate(guardAssignments);
-
-      /**
-       * 🔔 NOTIFICATIONS (Updated Shift)
-       */
-      const notificationsPayload = guardIds.map((guardId) => ({
-        userId: guardId,
-        role: "guard",
-        title: "Shift Updated",
-        message: `Your shift has been updated. Timing: ${startTime || "updated"} to ${endTime || "updated"} from ${normalizedStartDate} till ${normalizedEndDate}.`,
-        type: "SHIFT_UPDATED",
-        data: {
-          shiftId: staticShift.id,
-          startTime,
-          endTime,
-          startDate: normalizedStartDate,
-          endDate: normalizedEndDate,
-        },
-      }));
-
-      await Notification.bulkCreate(notificationsPayload);
+        status: "upcoming", // 👈 new guards start pending
+      });
     }
+  }
+
+  // 4️⃣ Identify REMOVED guards
+  for (const assignment of existingAssignments) {
+    if (!incomingGuardSet.has(assignment.guardId)) {
+      toRemove.push(assignment.guardId);
+    }
+  }
+
+  // 5️⃣ Remove deleted guards
+  if (toRemove.length > 0) {
+    await StaticGuards.destroy({
+      where: {
+        staticId: staticShift.id,
+        guardId: toRemove,
+      },
+    });
+  }
+
+  // 6️⃣ Create new guard assignments
+  if (toCreate.length > 0) {
+    await StaticGuards.bulkCreate(toCreate);
+  }
+
+  // 7️⃣ Notify ONLY newly added guards
+  if (toCreate.length > 0) {
+    const notificationsPayload = toCreate.map(({ guardId }) => ({
+      userId: guardId,
+      role: "guard",
+      title: "New Shift Assigned",
+      message: "You have been assigned a new shift.",
+      type: "SHIFT_ASSIGNED",
+      data: {
+        shiftId: staticShift.id,
+        startTime,
+        endTime,
+        startDate: normalizedStartDate,
+        endDate: normalizedEndDate,
+      },
+    }));
+
+    await Notification.bulkCreate(notificationsPayload);
+  }
+}
 
     /**
      * 📦 FETCH UPDATED SHIFT
@@ -373,7 +409,7 @@ export const editSchedule = async (req, res, next) => {
       data: updatedShift,
     });
   } catch (error) {
-    console.error("EDIT SCHEDULE ERROR:", error.stack || error);
+    console.error("EDIT SCHEDULE ERROR:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
