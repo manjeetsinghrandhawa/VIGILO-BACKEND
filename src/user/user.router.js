@@ -1,5 +1,5 @@
 import express from "express";
-import { registerUser, verifyRegisterEmail,deleteClient,createGuardByAdmin, resendOtp, userLogin, registerAdmin, forgotPassword, verifyForgotPasswordOtp, resendForgotPasswordOtp, setNewPassword, registerGaurd, getProfile, editProfile, deleteProfile, getAllGuards, getGuardById,getAllClients, editClient, getClientById,editGuard, updateGuardNotificationPreference, getGuardNotificationPreference } from "./user.controller.js";
+import { registerUser, verifyRegisterEmail,deleteClient,createGuardByAdmin, resendOtp, userLogin, registerAdmin, forgotPassword, verifyForgotPasswordOtp, resendForgotPasswordOtp, setNewPassword, registerGaurd, getProfile, editProfile, deleteProfile, getAllGuards, getGuardById,getAllClients, editClient, getClientById,editGuard, updateGuardNotificationPreference, getGuardNotificationPreference, changePassword } from "./user.controller.js";
 import { auth, isAdmin } from "../../middlewares/auth.js";
 
 const route = express.Router();
@@ -27,6 +27,7 @@ route.get("/getGuardById/:id",auth,isAdmin, getGuardById );
 route.get("/getAllClients",auth,isAdmin, getAllClients );
 route.post("/deleteClient",auth, isAdmin,deleteClient);
 route.post("/createGuardByAdmin", auth, isAdmin,createGuardByAdmin);
+route.patch("/changePassword", auth, changePassword)
 
 route.get("/getClientById/:id", auth, isAdmin, getClientById); 
 route.put("/editClient/:id", auth, isAdmin, editClient); 

@@ -1025,4 +1025,84 @@ export const getGuardNotificationPreference = async (req, res, next) => {
   }
 };
 
+export const changePassword = async (req, res, next) => {
+  try {
+    const userId = req.userId;
+    const { oldPassword, newPassword, confirmPassword } = req.body;
+
+    // 🔍 Validate inputs
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      return next(
+        new ErrorHandler(
+          "Old password, new password and confirm password are required",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    if (newPassword !== confirmPassword) {
+      return next(
+        new ErrorHandler(
+          "New password and confirm password do not match",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    if (oldPassword === newPassword) {
+      return next(
+        new ErrorHandler(
+          "New password must be different from old password",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    // 🔎 Fetch user
+    const user = await userModel.findByPk(userId);
+
+    if (!user) {
+      return next(
+        new ErrorHandler("User not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    // 🔐 Check old password
+    const isPasswordMatched = await bcrypt.compare(
+      oldPassword,
+      user.password
+    );
+
+    if (!isPasswordMatched) {
+      return next(
+        new ErrorHandler(
+          "Old password is incorrect",
+          StatusCodes.UNAUTHORIZED
+        )
+      );
+    }
+
+    // 🔐 Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    // 💾 Update password
+    user.password = hashedPassword;
+    await user.save();
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Password changed successfully",
+    });
+  } catch (error) {
+    console.error("Change password error:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to change password",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+
 
