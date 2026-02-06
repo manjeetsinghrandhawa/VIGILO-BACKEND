@@ -10,6 +10,7 @@ import moment from "moment-timezone";
 import { Op } from "sequelize";
 import Static from "../shift/static.model.js";
 import StaticGuards from "../shift/staticGuards.model.js";
+import Incident from "../incident/incident.model.js";
 
 
 export const createOrder = catchAsyncError(async (req, res, next) => {
@@ -725,7 +726,7 @@ export const getMyOrdersByDate = async (req, res, next) => {
 
     const tz = getTimeZone();
 
-    // 🔥 Create full day range
+    // ✅ Exact date range
     const startOfDay = moment.tz(date, tz).startOf("day").toDate();
     const endOfDay = moment.tz(date, tz).endOf("day").toDate();
 
@@ -733,13 +734,30 @@ export const getMyOrdersByDate = async (req, res, next) => {
       where: {
         userId,
         startDate: {
-          [Op.between]: [startOfDay, endOfDay], // ✅ KEY FIX
+          [Op.between]: [startOfDay, endOfDay],
         },
       },
-      order: [["startDate", "ASC"]],
+      include: [
+        {
+          model: Static,
+          as: "statics",
+          required: false, // 👈 order can exist without shifts
+          include: [
+            {
+              model: Incident,
+              as: "incidents",
+              required: false,
+            },
+          ],
+        },
+      ],
+      order: [
+        ["startDate", "ASC"],
+        [{ model: Static, as: "statics" }, "startTime", "ASC"],
+      ],
     });
 
-    const response = orders.map((order) => ({
+    const response = orders.map(order => ({
       id: order.id,
       serviceType: order.serviceType,
       locationName: order.locationName,
@@ -755,24 +773,44 @@ export const getMyOrdersByDate = async (req, res, next) => {
       endTime: order.endTime,
       images: order.images || [],
       createdAt: order.createdAt,
+
+      // 👇 SHIFTS DATA
+      shifts: (order.statics || []).map(shift => ({
+        id: shift.id,
+        type: shift.type,
+        status: shift.status,
+        description: shift.description,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        createdAt: shift.createdAt,
+
+        // 👇 INCIDENTS (OPTIONAL)
+        incidents: (shift.incidents || []).map(incident => ({
+          id: incident.id,
+          type: incident.type,
+          description: incident.description,
+          status: incident.status,
+          createdAt: incident.createdAt,
+        })),
+      })),
     }));
 
     return res.status(StatusCodes.OK).json({
       success: true,
-      message: "Orders fetched successfully for selected date",
+      message: "Orders and shifts fetched successfully for selected date",
       date,
       count: response.length,
       data: response,
     });
   } catch (error) {
-    console.error("GET MY ORDERS BY DATE ERROR:", error.stack || error);
+    console.error("GET MY ORDERS BY DATE ERROR:", error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Internal server error",
-      error: error.message,
     });
   }
 };
+
 
 
 
