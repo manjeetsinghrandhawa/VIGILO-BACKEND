@@ -207,32 +207,6 @@ export const getOrderById = async (req, res, next) => {
   }
 };
 
-
-export const cancelOrder = catchAsyncError(async (req, res, next) => {
-  const { id } = req.params;
-  const order = await Order.findByPk(id);
-  if(!order){
-    return next(
-      new ErrorHandler("Order not found", StatusCodes.NOT_FOUND)
-    );
-  }
-
-  if(order.status!=="pending"){
-    return next(
-      new ErrorHandler("Only pending orders can be cancelled", StatusCodes.BAD_REQUEST)
-    );
-  }
-  
-  order.status="cancelled";
-  await order.save();
-
-  res.status(StatusCodes.OK).json({
-    success: true,
-    message: "Order cancelled successfully",
-    data: order,
-  })
-});
-
 export const acceptOrder = catchAsyncError(async (req, res, next) => {
   const { id } = req.params;
 
@@ -900,6 +874,66 @@ export const requestShiftChange = async (req, res, next) => {
     });
   }
 };
+
+export const cancelOrder = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+    const { id: orderId } = req.params;
+
+    if (!userId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
+
+    // 🔍 Find order
+    const order = await Order.findOne({
+      where: {
+        id: orderId,
+        userId,
+      },
+    });
+
+    if (!order) {
+      return next(
+        new ErrorHandler("Order not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    // ❌ Only UPCOMING orders can be cancelled
+    if (order.status !== "upcoming") {
+      return next(
+        new ErrorHandler(
+          `Order cannot be cancelled when status is ${order.status}`,
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    // ✅ Update status
+    order.status = "cancelled";
+    order.cancelledAt = new Date(); // optional but recommended
+
+    await order.save();
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Order cancelled successfully",
+      data: {
+        id: order.id,
+        status: order.status,
+        cancelledAt: order.cancelledAt,
+      },
+    });
+  } catch (error) {
+    console.error("CANCEL ORDER ERROR:", error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
 
 
 

@@ -31,6 +31,7 @@ route.get("/getRequestedOrders", auth, isUser, getRequestedOrders);
 route.get("/getOrderHistory", auth, isUser, getOrderHistory);
 route.post("/getMyOrdersByDate", auth, isUser, getMyOrdersByDate);
 route.post("/requestShiftChange/:id", auth, isUser, requestShiftChange);
+route.post("/cancelOrder/:id", auth, isUser, cancelOrder);
 // ============================================
 // ADMIN ROUTES
 // ============================================
