@@ -11,6 +11,8 @@ import { Op } from "sequelize";
 import Static from "../shift/static.model.js";
 import StaticGuards from "../shift/staticGuards.model.js";
 import Incident from "../incident/incident.model.js";
+import ShiftChangeRequest from "./shiftChangeRequest.model.js";
+import { notifyAdminOnly } from "../../utils/notifyAdminOnly.helper.js";
 
 
 export const createOrder = catchAsyncError(async (req, res, next) => {
@@ -810,6 +812,95 @@ export const getMyOrdersByDate = async (req, res, next) => {
     });
   }
 };
+
+export const requestShiftChange = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+    const { id: shiftId } = req.params; // ✅ rename for clarity
+    const { startTime, endTime, reason } = req.body;
+
+    if (!userId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
+
+    if (!startTime || !endTime || !reason) {
+      return next(
+        new ErrorHandler(
+          "Start time, end time and reason are required",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    // ✅ Verify shift exists
+    const shift = await Static.findByPk(shiftId);
+    if (!shift) {
+      return next(
+        new ErrorHandler("Shift not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    // ❗ Prevent duplicate pending request for same shift
+    const existingRequest = await ShiftChangeRequest.findOne({
+      where: {
+        shiftId, // ✅ FIXED
+        requestedBy: userId,
+        status: "pending",
+      },
+    });
+
+    if (existingRequest) {
+      return next(
+        new ErrorHandler(
+          "You already have a pending request for this shift",
+          StatusCodes.CONFLICT
+        )
+      );
+    }
+
+    const tz = getTimeZone();
+
+    const requestedStart = moment.tz(startTime, tz).utc().toDate();
+    const requestedEnd = moment.tz(endTime, tz).utc().toDate();
+
+    // ✅ CREATE REQUEST (DO NOT SET id)
+    const request = await ShiftChangeRequest.create({
+      shiftId, // ✅ REQUIRED FIELD
+      requestedBy: userId,
+      requestedStartTime: requestedStart,
+      requestedEndTime: requestedEnd,
+      reason,
+      status: "pending",
+    });
+
+    // 🔔 Notify admin
+    await notifyAdminOnly({
+      title: "Shift Change Request",
+      type: "SHIFT_CHANGE_REQUEST",
+      message: "A guard requested a shift time change.",
+      data: {
+        shiftId,
+        requestId: request.id,
+        requestedBy: userId,
+      },
+    });
+
+    return res.status(StatusCodes.CREATED).json({
+      success: true,
+      message: "Shift change request sent to admin",
+      data: request,
+    });
+  } catch (error) {
+    console.error("SHIFT CHANGE REQUEST ERROR:", error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
 
 
 

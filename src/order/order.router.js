@@ -13,7 +13,8 @@ import {
   getUserOngoingOrders,
   getRequestedOrders,
   getOrderHistory,
-  getMyOrdersByDate
+  getMyOrdersByDate,
+  requestShiftChange
 } from "./order.controller.js";
 
 const route = express.Router();
@@ -29,6 +30,7 @@ route.get("/getUserOngoingOrders", auth, isUser, getUserOngoingOrders);
 route.get("/getRequestedOrders", auth, isUser, getRequestedOrders);
 route.get("/getOrderHistory", auth, isUser, getOrderHistory);
 route.post("/getMyOrdersByDate", auth, isUser, getMyOrdersByDate);
+route.post("/requestShiftChange/:id", auth, isUser, requestShiftChange);
 // ============================================
 // ADMIN ROUTES
 // ============================================
