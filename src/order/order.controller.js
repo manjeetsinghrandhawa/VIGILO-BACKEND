@@ -934,6 +934,152 @@ export const cancelOrder = async (req, res, next) => {
   }
 };
 
+export const editOrderForUser = catchAsyncError(async (req, res, next) => {
+  const userId = req.user?.id;
+  const { id: orderId } = req.params;
+
+  if (!userId) {
+    return next(
+      new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+    );
+  }
+
+  // 🔍 Find order
+  const order = await Order.findOne({
+    where: {
+      id: orderId,
+      userId,
+    },
+  });
+
+  if (!order) {
+    return next(
+      new ErrorHandler("Order not found", StatusCodes.NOT_FOUND)
+    );
+  }
+
+  // ❌ Block editing for non-editable states
+  const editableStatuses = ["pending"];
+
+  if (!editableStatuses.includes(order.status)) {
+    return next(
+      new ErrorHandler(
+        `Order cannot be edited when status is '${order.status}'`,
+        StatusCodes.BAD_REQUEST
+      )
+    );
+  }
+
+  const {
+    serviceType,
+    locationName,
+    locationAddress,
+    siteService,
+    guardsRequired,
+    description,
+    startDate,
+    endDate,
+    startTime,
+    endTime,
+    images,
+  } = req.body;
+
+  // 📍 Handle location update
+  let sitePoint;
+  if (siteService) {
+    if (
+      typeof siteService !== "object" ||
+      typeof siteService.lat !== "number" ||
+      typeof siteService.lng !== "number"
+    ) {
+      return next(
+        new ErrorHandler(
+          "Invalid siteService format — must include lat and lng as numbers",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    sitePoint = sequelize.literal(
+      `ST_GeomFromText('POINT(${siteService.lng} ${siteService.lat})', 4326)`
+    );
+  }
+
+  // ✅ Update only provided fields
+  await order.update({
+    serviceType: serviceType ?? order.serviceType,
+    locationName: locationName ?? order.locationName,
+    locationAddress: locationAddress ?? order.locationAddress,
+    siteService: sitePoint ?? order.siteService,
+    guardsRequired: guardsRequired ?? order.guardsRequired,
+    description: description ?? order.description,
+    startDate: startDate ? toUTC(startDate) : order.startDate,
+    endDate: endDate ? toUTC(endDate) : order.endDate,
+    startTime: startTime ?? order.startTime,
+    endTime: endTime ?? order.endTime,
+    images: images ?? order.images,
+  });
+
+  return res.status(StatusCodes.OK).json({
+    success: true,
+    message: "Order updated successfully",
+    data: order,
+  });
+});
+
+export const deleteOrder = catchAsyncError(async (req, res, next) => {
+  const userId = req.user?.id;
+  const { id: orderId } = req.params;
+
+  if (!userId) {
+    return next(
+      new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+    );
+  }
+
+  // 🔍 Find order
+  const order = await Order.findOne({
+    where: {
+      id: orderId,
+      userId,
+    },
+  });
+
+  if (!order) {
+    return next(
+      new ErrorHandler("Order not found", StatusCodes.NOT_FOUND)
+    );
+  }
+
+  // ❌ Allow delete ONLY for pending orders
+  if (order.status !== "pending") {
+    return next(
+      new ErrorHandler(
+        "Only pending orders can be deleted",
+        StatusCodes.BAD_REQUEST
+      )
+    );
+  }
+
+  // 🧹 Delete order
+  await order.destroy();
+
+  // 🔔 Optional: Notify admin
+  await notifyAdminOnly({
+    title: "Order Deleted",
+    type: "ORDER_DELETED",
+    message: "A pending order was deleted by the client.",
+    data: {
+      orderId,
+      deletedBy: userId,
+    },
+  });
+
+  return res.status(StatusCodes.OK).json({
+    success: true,
+    message: "Order deleted successfully",
+  });
+});
 
 
 
