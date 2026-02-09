@@ -209,24 +209,34 @@ export const createSchedule = async (req, res, next) => {
     // =========================
     // 🔔 NOTIFICATIONS
     // =========================
-    const notifications = guardIds.map((guardId) => ({
+    // =========================
+// 🔔 PER-DAY NOTIFICATIONS
+// =========================
+const notifications = [];
+
+for (const shift of createdShifts) {
+  const shiftDate = moment(shift.date).format("DD MMM YYYY");
+
+  for (const guardId of guardIds) {
+    notifications.push({
       userId: guardId,
       role: "guard",
       title: "New Shift Assigned",
-      message: `You have been assigned a shift from ${startTime} to ${endTime} between ${startDate.format(
-        "DD MMM YYYY"
-      )} and ${finalEndDate.format("DD MMM YYYY")}.`,
+      message: `You have been assigned a shift on ${shiftDate} from ${startTime} to ${endTime}.`,
       type: "SHIFT_ASSIGNED",
       data: {
         orderId,
+        shiftId: shift.id,
+        date: shift.date,
         startTime,
         endTime,
-        startDate: startDate.format("YYYY-MM-DD"),
-        endDate: finalEndDate.format("YYYY-MM-DD"),
       },
-    }));
+    });
+  }
+}
 
-    await Notification.bulkCreate(notifications);
+await Notification.bulkCreate(notifications);
+
 
     // =========================
     // ✅ RESPONSE
