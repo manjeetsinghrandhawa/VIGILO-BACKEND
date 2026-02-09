@@ -1,6 +1,6 @@
 import express from "express";
 import { auth, isGaurd, isAdmin } from "../../middlewares/auth.js";
-import { saveGuardProfile,saveGuardBankDetails,getGuardProfile, getGuardBankDetails,getTermsAndConditions,getPrivacyPolicy,saveTaxDeclaration, getTaxDeclaration,saveSuperNomination, getSuperNominationContent, getGuardOnboardingStatus } from "./guardProfile.controller.js";
+import { saveGuardProfile,saveGuardBankDetails,getGuardProfile, getGuardBankDetails,getTermsAndConditions,getPrivacyPolicy,saveTaxDeclaration, getTaxDeclaration,saveSuperNomination, getSuperNominationContent, getGuardOnboardingStatus, createLicense } from "./guardProfile.controller.js";
 
 
 const router = express.Router();
@@ -26,4 +26,6 @@ router.post("/saveSuperNomination", auth, isGaurd, saveSuperNomination);
 router.get("/getSuperNominationContent", auth, isGaurd, getSuperNominationContent);
 
 router.get("/getGuardOnboardingStatus", auth, isGaurd, getGuardOnboardingStatus);
+
+router.post("/createLicense",auth,isGaurd, createLicense);
 export default router;

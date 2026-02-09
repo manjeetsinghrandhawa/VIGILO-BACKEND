@@ -4,6 +4,7 @@ import ErrorHandler from "../../utils/errorHandler.js";
 import GuardBankDetails from "./guardBankDetails.model.js";
 import GuardTaxDeclaration from "./taxDeclaration.model.js";
 import GuardSuperNomination from "./superNomination.model.js";
+import License from "./license.model.js";
 
 export const saveGuardProfile = async (req, res, next) => {
   try {
@@ -572,6 +573,70 @@ export const getGuardOnboardingStatus = async (req, res, next) => {
     );
   }
 };
+
+export const createLicense = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+
+    const {
+      licenseName,
+      expiryDate,
+      renewalDate,
+      images,
+    } = req.body;
+
+    if (!userId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
+
+    if (!licenseName || !expiryDate || !renewalDate) {
+      return next(
+        new ErrorHandler(
+          "License name, expiry date and renewal date are required",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    // 🔎 Prevent duplicate license name per user
+    const existingLicense = await License.findOne({
+      where: {
+        userId,
+        licenseName,
+      },
+    });
+
+    if (existingLicense) {
+      return next(
+        new ErrorHandler(
+          "License with this name already exists",
+          StatusCodes.CONFLICT
+        )
+      );
+    }
+
+    const license = await License.create({
+      userId,
+      licenseName,
+      expiryDate: new Date(expiryDate),
+      renewalDate: new Date(renewalDate),
+      images,
+    });
+
+    return res.status(StatusCodes.CREATED).json({
+      success: true,
+      message: "License added successfully",
+      data: license,
+    });
+  } catch (error) {
+    console.error("Create License Error:", error);
+    return next(error);
+  }
+};
+
+
 
 
 
