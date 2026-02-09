@@ -1,6 +1,6 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../../config/database.js";
-import CheckPoint from "./patrolCheckpoint.model.js"; // adjust path if needed
+import PatrolCheckPoint from "./patrolCheckpoint.model.js"; // adjust path if needed
 
 const QR = sequelize.define(
   "QR",
@@ -14,11 +14,7 @@ const QR = sequelize.define(
     checkPointId: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: CheckPoint,
-        key: "id",
-      },
-      onDelete: "CASCADE",
+      
     },
 
     latitude: {
@@ -42,15 +38,7 @@ const QR = sequelize.define(
   }
 );
 
-QR.belongsTo(CheckPoint, {
-  foreignKey: "checkPointId",
-  as: "checkPoint",
-});
 
-CheckPoint.hasOne(QR, {
-  foreignKey: "checkPointId",
-  as: "qr",
-});
 
 
 export default QR;

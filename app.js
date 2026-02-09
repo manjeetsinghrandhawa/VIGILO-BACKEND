@@ -13,6 +13,8 @@ import invoicingRoute from "./src/invoicing/invoicing.router.js";
 import notifications from "./src/notifications/notifications.router.js";
 import guardProfileRoute from "./src/guardProfile/guardProfile.router.js";
 import patrolRoute from "./src/patrolling/patrolling.router.js";
+import "./utils/association.js";
+
 
 dotenv.config({ path: "./config/.env" });
 

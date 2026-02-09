@@ -356,4 +356,67 @@ export const createCheckpoint = async (req, res, next) => {
   }
 };
 
+export const getCheckpoints = async (req, res, next) => {
+  try {
+    const { siteId, subSiteId } = req.query;
+
+    if (!siteId && !subSiteId) {
+      return next(
+        new ErrorHandler(
+          "siteId or subSiteId is required",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    const whereCondition = siteId
+      ? { siteId }
+      : { subSiteId };
+
+    const checkpoints = await PatrolCheckpoint.findAll({
+      where: whereCondition,
+      include: [
+        {
+          model: QR,
+          as: "qr",
+        },
+      ],
+      order: [["createdAt", "ASC"]],
+    });
+
+    const data = checkpoints.map((cp) => ({
+      checkpointId: cp.id,
+      name: cp.name,
+      range: cp.verificationRange,
+      latitude: cp.latitude,
+      longitude: cp.longitude,
+
+      qr: cp.qr
+        ? {
+            qrUrl: cp.qr.qrUrl,
+            qrData: {
+              checkpointId: cp.id,
+              qrCode: cp.qr.id,
+              coordinates: {
+                lat: cp.qr.latitude,
+                lng: cp.qr.longitude,
+              },
+              range: cp.verificationRange,
+              timestamp: cp.qr.createdAt,
+            },
+          }
+        : null,
+    }));
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    console.error("GET CHECKPOINTS ERROR:", error);
+    next(error);
+  }
+};
+
+
 

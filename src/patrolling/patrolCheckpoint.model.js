@@ -2,6 +2,7 @@ import { DataTypes } from "sequelize";
 import sequelize from "../../config/database.js";
 import PatrolSite from "./patrolSite.model.js";
 import PatrolSubSite from "./patrolSubSite.model.js";
+import QR from "./QR.model.js";
 
 const PatrolCheckpoint = sequelize.define(
   "PatrolCheckpoint",

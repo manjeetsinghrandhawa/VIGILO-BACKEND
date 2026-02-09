@@ -1,6 +1,9 @@
 import sequelize from "./config/database.js"; 
 import app from './app.js';
 import "./src/cron/statusUpdates.js";
+import "./utils/association.js";
+
+
 
 // Import ALL models first
 import "./src/shift/static.model.js";
