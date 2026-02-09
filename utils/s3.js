@@ -37,6 +37,7 @@ export const s3UploadMulti = async (files) => {
 
 const allowedMimeTypes = [
   "image/jpeg", 
+  "image/svg+xml",
   "image/jpg",  
   "image/png",
   "image/gif",

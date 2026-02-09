@@ -4,7 +4,11 @@ import PatrolSite from "./patrolSite.model.js";
 import User from "../user/user.model.js";
 import ErrorHandler from "../../utils/errorHandler.js";
 import PatrolSubSite from "./patrolSubSite.model.js";
-
+import QRCode from "qrcode";
+import sequelize from "../../config/database.js";
+import PatrolCheckpoint from "./patrolCheckpoint.model.js";
+import QR from "./QR.model.js";
+import { s3Uploadv2 } from "../../utils/s3.js";
 export const createPatrolSite = async (req, res, next) => {
   try {
     const userId = req.user?.id;
@@ -237,4 +241,119 @@ export const getSubSitesBySiteId = async (req, res, next) => {
     );
   }
 };
+
+export const createCheckpoint = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const {
+      siteId,
+      subSiteId,
+      name,
+      latitude,
+      longitude,
+      verificationRange,
+      priorityLevel,
+      description,
+    } = req.body;
+
+    // =========================
+    // 🔒 VALIDATIONS
+    // =========================
+    if (!name || latitude === undefined || longitude === undefined) {
+      return next(
+        new ErrorHandler(
+          "Checkpoint name, latitude and longitude are required",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    if (!siteId && !subSiteId) {
+      return next(
+        new ErrorHandler(
+          "Either siteId or subSiteId is required",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    // =========================
+    // 📍 CREATE CHECKPOINT
+    // =========================
+    const checkpoint = await PatrolCheckpoint.create(
+      {
+        siteId: siteId || null,
+        subSiteId: subSiteId || null,
+        name,
+        latitude,
+        longitude,
+        verificationRange,
+        priorityLevel,
+        description,
+      },
+      { transaction }
+    );
+
+    // =========================
+    // 🔳 GENERATE QR DATA
+    // =========================
+    const qrPayload = JSON.stringify({
+      checkPointId: checkpoint.id,
+      latitude,
+      longitude,
+    });
+
+    const svgData = await QRCode.toString(qrPayload, { type: "svg" });
+
+    const file = {
+      originalname: `checkpoint-qr-${checkpoint.id}.svg`,
+      buffer: Buffer.from(svgData),
+      mimetype: "image/svg+xml",
+    };
+
+    // =========================
+    // ☁️ UPLOAD TO S3
+    // =========================
+    const s3Result = await s3Uploadv2(file);
+
+    // =========================
+    // 💾 SAVE QR RECORD
+    // =========================
+    const qrRecord = await QR.create(
+      {
+        checkPointId: checkpoint.id,
+        latitude,
+        longitude,
+        qrUrl: s3Result.Location,
+      },
+      { transaction }
+    );
+
+    await transaction.commit();
+
+    // =========================
+    // ✅ RESPONSE
+    // =========================
+    return res.status(StatusCodes.CREATED).json({
+      success: true,
+      message: "Checkpoint created successfully",
+      data: {
+        checkpoint,
+        qr: qrRecord,
+      },
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error("CREATE CHECKPOINT ERROR:", error);
+
+    return next(
+      new ErrorHandler(
+        "Failed to create checkpoint",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
 
