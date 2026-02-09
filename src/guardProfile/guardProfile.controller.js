@@ -636,6 +636,81 @@ export const createLicense = async (req, res, next) => {
   }
 };
 
+export const getMyLicenses = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
+
+    const licenses = await License.findAll({
+      where: { userId },
+      attributes: [
+        "id",
+        "licenseName",
+        "expiryDate",
+        "renewalDate",
+        "createdAt",
+      ],
+      order: [["expiryDate", "ASC"]],
+    });
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Licenses fetched successfully",
+      data: licenses,
+    });
+  } catch (error) {
+    console.error("Get My Licenses Error:", error);
+    return next(error);
+  }
+};
+
+export const getLicenseById = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+    const { licenseId } = req.params;
+
+    if (!userId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
+
+    if (!licenseId) {
+      return next(
+        new ErrorHandler("License ID is required", StatusCodes.BAD_REQUEST)
+      );
+    }
+
+    const license = await License.findOne({
+      where: {
+        id: licenseId,
+        userId, // 🔐 ensure guard can access only own license
+      },
+    });
+
+    if (!license) {
+      return next(
+        new ErrorHandler("License not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "License details fetched successfully",
+      data: license,
+    });
+  } catch (error) {
+    console.error("Get License By ID Error:", error);
+    return next(error);
+  }
+};
+
+
 
 
 

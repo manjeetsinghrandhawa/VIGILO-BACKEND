@@ -1,6 +1,6 @@
 import express from "express";
 import { auth, isGaurd, isAdmin } from "../../middlewares/auth.js";
-import { saveGuardProfile,saveGuardBankDetails,getGuardProfile, getGuardBankDetails,getTermsAndConditions,getPrivacyPolicy,saveTaxDeclaration, getTaxDeclaration,saveSuperNomination, getSuperNominationContent, getGuardOnboardingStatus, createLicense } from "./guardProfile.controller.js";
+import { saveGuardProfile,saveGuardBankDetails,getGuardProfile, getGuardBankDetails,getTermsAndConditions,getPrivacyPolicy,saveTaxDeclaration, getTaxDeclaration,saveSuperNomination, getSuperNominationContent, getGuardOnboardingStatus, createLicense, getMyLicenses, getLicenseById } from "./guardProfile.controller.js";
 
 
 const router = express.Router();
@@ -28,4 +28,8 @@ router.get("/getSuperNominationContent", auth, isGaurd, getSuperNominationConten
 router.get("/getGuardOnboardingStatus", auth, isGaurd, getGuardOnboardingStatus);
 
 router.post("/createLicense",auth,isGaurd, createLicense);
+
+router.get("/getMyLicenses", auth, isGaurd, getMyLicenses);
+
+router.get("/getLicenseById/:licenseId", auth, isGaurd, getLicenseById); // Reusing getMyLicenses to fetch specific license by ID
 export default router;
