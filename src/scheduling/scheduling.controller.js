@@ -91,69 +91,20 @@ export const createSchedule = async (req, res, next) => {
     // 🔹 SAME DAY SHIFT
     // =========================
     if (isSameDay) {
-      let shiftStart = moment.tz(
-        `${startDate.format("YYYY-MM-DD")} ${startTime}`,
-        "YYYY-MM-DD HH:mm",
-        tz
-      );
-
-      let shiftEnd = moment.tz(
-        `${startDate.format("YYYY-MM-DD")} ${endTime}`,
-        "YYYY-MM-DD HH:mm",
-        tz
-      );
-
-      // 🌙 Overnight shift
-      if (shiftEnd.isBefore(shiftStart)) {
-        shiftEnd.add(1, "day");
-      }
-
-      const shiftStatus = today.isAfter(shiftEnd)
-        ? "completed"
-        : "pending";
-
-      const shift = await Static.create({
-        orderId,
-        description,
-        date: startDate.format("YYYY-MM-DD"),
-        endDate: startDate.format("YYYY-MM-DD"),
-        startTime: shiftStart.utc().toDate(),
-        endTime: shiftEnd.utc().toDate(),
-        type: "static",
-        status: shiftStatus,
-      });
-
-      await StaticGuards.bulkCreate(
-        guardIds.map((guardId) => ({
-          staticId: shift.id,
-          guardId,
-          status: shiftStatus,
-        }))
-      );
-
-      createdShifts.push(shift);
-    }
-
-    // =========================
-    // 🔹 MULTI DAY SHIFT
-    // =========================
-    else {
-      let currentDay = startDate.clone();
-
-      while (currentDay.isSameOrBefore(finalEndDate)) {
+      for (const guardId of guardIds) {
         let shiftStart = moment.tz(
-          `${currentDay.format("YYYY-MM-DD")} ${startTime}`,
+          `${startDate.format("YYYY-MM-DD")} ${startTime}`,
           "YYYY-MM-DD HH:mm",
           tz
         );
 
         let shiftEnd = moment.tz(
-          `${currentDay.format("YYYY-MM-DD")} ${endTime}`,
+          `${startDate.format("YYYY-MM-DD")} ${endTime}`,
           "YYYY-MM-DD HH:mm",
           tz
         );
 
-        // 🌙 Overnight shift
+        // 🌙 Overnight shift logic (UNCHANGED)
         if (shiftEnd.isBefore(shiftStart)) {
           shiftEnd.add(1, "day");
         }
@@ -162,26 +113,80 @@ export const createSchedule = async (req, res, next) => {
           ? "completed"
           : "pending";
 
+        // ✅ Create UNIQUE shift for this guard
         const shift = await Static.create({
           orderId,
           description,
-          date: currentDay.format("YYYY-MM-DD"),
-          endDate: currentDay.format("YYYY-MM-DD"),
+          date: startDate.format("YYYY-MM-DD"),
+          endDate: startDate.format("YYYY-MM-DD"),
           startTime: shiftStart.utc().toDate(),
           endTime: shiftEnd.utc().toDate(),
           type: "static",
           status: shiftStatus,
         });
 
-        await StaticGuards.bulkCreate(
-          guardIds.map((guardId) => ({
+        // ✅ Link only ONE guard to this shift
+        await StaticGuards.create({
+          staticId: shift.id,
+          guardId,
+          status: shiftStatus,
+        });
+
+        createdShifts.push(shift);
+      }
+    }
+
+    // =========================
+    // 🔹 MULTI DAY SHIFT
+    // =========================
+     else {
+      let currentDay = startDate.clone();
+
+      while (currentDay.isSameOrBefore(finalEndDate)) {
+        for (const guardId of guardIds) {
+          let shiftStart = moment.tz(
+            `${currentDay.format("YYYY-MM-DD")} ${startTime}`,
+            "YYYY-MM-DD HH:mm",
+            tz
+          );
+
+          let shiftEnd = moment.tz(
+            `${currentDay.format("YYYY-MM-DD")} ${endTime}`,
+            "YYYY-MM-DD HH:mm",
+            tz
+          );
+
+          // 🌙 Overnight shift logic (UNCHANGED)
+          if (shiftEnd.isBefore(shiftStart)) {
+            shiftEnd.add(1, "day");
+          }
+
+          const shiftStatus = today.isAfter(shiftEnd)
+            ? "completed"
+            : "pending";
+
+          // ✅ Create UNIQUE shift
+          const shift = await Static.create({
+            orderId,
+            description,
+            date: currentDay.format("YYYY-MM-DD"),
+            endDate: currentDay.format("YYYY-MM-DD"),
+            startTime: shiftStart.utc().toDate(),
+            endTime: shiftEnd.utc().toDate(),
+            type: "static",
+            status: shiftStatus,
+          });
+
+          // ✅ Attach ONLY this guard
+          await StaticGuards.create({
             staticId: shift.id,
             guardId,
             status: shiftStatus,
-          }))
-        );
+          });
 
-        createdShifts.push(shift);
+          createdShifts.push(shift);
+        }
+
         currentDay.add(1, "day");
       }
     }
@@ -207,10 +212,10 @@ export const createSchedule = async (req, res, next) => {
     });
 
     // =========================
-    // 🔔 NOTIFICATIONS
+    //  NOTIFICATIONS
     // =========================
     // =========================
-// 🔔 PER-DAY NOTIFICATIONS
+//  PER-DAY NOTIFICATIONS
 // =========================
 const notifications = [];
 
