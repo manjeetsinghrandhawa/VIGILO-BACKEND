@@ -633,7 +633,7 @@ export const getOrderHistory = async (req, res, next) => {
       where: {
         userId,
         status: {
-          [Op.in]: ["completed", "cancelled","missed", "order_missed","ongoing"],
+          [Op.in]: ["completed", "cancelled","missed", "order_missed"],
         },
       },
       order: [["updatedAt", "DESC"]],
