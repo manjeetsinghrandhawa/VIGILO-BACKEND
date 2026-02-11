@@ -109,7 +109,7 @@ export const getAllShifts = catchAsyncError(async (req, res, next) => {
 
   // Fetch shifts assigned to the logged-in guard
   const { count, rows: shifts } = await Static.findAndCountAll({
-    attributes: ["id", "type", "description", "startTime", "endTime", "status"],
+    attributes: ["id", "type", "description", "startTime", "endTime", "status", "shiftTotalHours", "createdAt"],
     include: [
       {
         model: User,
@@ -164,6 +164,8 @@ export const getAllShifts = catchAsyncError(async (req, res, next) => {
       startTime: shift.startTime,
       endTime: shift.endTime,
       status: dynamicStatus,
+      shiftTotalHours: shift?.shiftTotalHours || null,
+      createdAt: shift.createdAt,
       guardName: shift.guards[0]?.name || "Unknown",
       guardStatus: shift.guards[0]?.StaticGuards?.status || "pending",
     });
@@ -303,6 +305,7 @@ await Notification.bulkCreate(
         guardId: userId,
         guardStatus: staticGuard.status,
         shiftStatus: shift.status,
+        shiftTotalHours: shift?.shiftTotalHours || null,
       },
     });
   } catch (error) {

@@ -759,6 +759,7 @@ export const getMyOrdersByDate = async (req, res, next) => {
         startTime: shift.startTime,
         endTime: shift.endTime,
         createdAt: shift.createdAt,
+        shiftTotalHours: shift?.shiftTotalHours || null,
 
         // 👇 INCIDENTS (OPTIONAL)
         incidents: (shift.incidents || []).map(incident => ({

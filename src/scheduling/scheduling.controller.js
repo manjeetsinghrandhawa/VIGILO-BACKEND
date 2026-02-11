@@ -507,6 +507,7 @@ export const getAllSchedules = async (req, res, next) => {
         "startTime",
         "endTime",
         "status",
+        "shiftTotalHours",
         "createdAt",
       ],
       include: [
@@ -558,6 +559,7 @@ export const getAllSchedules = async (req, res, next) => {
       return {
         id: shift.id,
         orderId: shift.orderId,
+        shiftTotalHours: shift?.shiftTotalHours || null,
         orderLocationName: shift.order?.locationName || null,
         orderLocationAddress: shift.order?.locationAddress || null,
         date: moment.utc(shift.startTime).format("YYYY-MM-DD"),
@@ -709,6 +711,7 @@ export const getMyAllShifts = async (req, res, next) => {
         "startTime",
         "endTime",
         "status",
+        "shiftTotalHours",
         "createdAt",
       ],
       include: [
@@ -755,7 +758,9 @@ export const getMyAllShifts = async (req, res, next) => {
         startTime: shift.startTime,
         endTime: shift.endTime,
         status: finalStatus,
+        shiftTotalHours: shift?.shiftTotalHours || null,
         createdAt: shift.createdAt,
+
         guard: {
           id: guard.id,
           name: guard.name,
@@ -996,6 +1001,7 @@ export const getMyUpcomingSchedules = async (req, res, next) => {
         "startTime",
         "endTime",
         "status",
+        "shiftTotalHours",
         "createdAt",
       ],
       include: [
@@ -1041,6 +1047,7 @@ export const getMyUpcomingSchedules = async (req, res, next) => {
         description: shift.description,
         startTime: shift.startTime,
         endTime: shift.endTime,
+        shiftTotalHours: shift?.shiftTotalHours || null,
         status: shift.status, // always "upcoming"
         createdAt: shift.createdAt,
         guard: {
@@ -1106,6 +1113,7 @@ export const getMyNewShiftRequests = async (req, res, next) => {
         "startTime",
         "endTime",
         "status",
+        "shiftTotalHours",
         "createdAt",
       ],
       include: [
@@ -1151,6 +1159,7 @@ export const getMyNewShiftRequests = async (req, res, next) => {
         description: shift.description,
         startTime: shift.startTime,
         endTime: shift.endTime,
+        shiftTotalHours: shift?.shiftTotalHours || null,
         status: "pending",
         createdAt: shift.createdAt,
         guard: {
@@ -1281,6 +1290,7 @@ const activeShift = await ShiftGuardModel.findOne({
         "startTime",
         "endTime",
         "status",
+        "shiftTotalHours",
         "createdAt",
       ],
       include: [
@@ -1317,7 +1327,7 @@ if (activeShift) {
       shiftDate: formatDate(shiftStart),
       startTime: formatTime(shiftStart),
       endTime: formatTime(shiftEnd),
-      duration: getShiftDuration(shiftStart, shiftEnd),
+      shiftTotalHours: shift?.shiftTotalHours || null,
 
       // 📌 Status info
       shiftStatus: shift.status,
@@ -1412,6 +1422,7 @@ if (activeShift) {
           startTime: formatTime(shiftStart),
           endTime: formatTime(shiftEnd),
           attemptedAt: formatTime(now),
+          shiftTotalHours: shift?.shiftTotalHours || null,
           status: "absent",
         },
       });
@@ -1444,6 +1455,7 @@ if (now > shiftEnd && now <= oneHourAfterEnd) {
       shiftStartTime: formatTime(shiftStart),
       shiftEndTime: formatTime(shiftEnd),
       attemptedAt: formatTime(now),
+        shiftTotalHours: shift?.shiftTotalHours || null,
       status: "absent",
     },
   });
@@ -1514,7 +1526,7 @@ if (now > shiftStart) {
         guardId,
         shiftType: type,
         shiftDate: formatDate(shiftStart),
-        shiftDuration: getShiftDuration(shiftStart, shiftEnd),
+        shiftTotalHours: shift?.shiftTotalHours || null,
         clockInTime: formatTime(now),
         shiftStartTime: formatTime(shiftStart),
         shiftEndTime: formatTime(shiftEnd),
@@ -1646,6 +1658,7 @@ export const clockOut = async (req, res, next) => {
         clockOutTime: formatTime(now),
         shiftStartTime: formatTime(shiftStart),
         shiftEndTime: formatTime(shiftEnd),
+        shiftTotalHours: shift?.shiftTotalHours || null,
         totalHours,
         assignmentStatus,
         shiftStatus,
@@ -1882,6 +1895,7 @@ const overtimeHours = pivot?.overtimeHours || null;
         type: shift.type,
         status: shift.status,
         description: shift.description,
+        shiftTotalHours: shift?.shiftTotalHours || null,
 
         order: {
           locationName: shift.order?.locationName || null,
@@ -2168,6 +2182,7 @@ export const endOvertime = async (req, res) => {
           startTime: shift.startTime,
           endTime: shift.endTime,
           status: shift.status,
+          shiftTotalHours: shift?.shiftTotalHours || null,
           location: {
             name: shift.order?.locationName || null,
             address: shift.order?.locationAddress || null,
@@ -2240,6 +2255,7 @@ const shifts = await Static.findAll({
     "startTime",
     "endTime",
     "status",
+    "shiftTotalHours",
     "createdAt",
   ],
   include: [
@@ -2290,6 +2306,7 @@ const shifts = await Static.findAll({
     startTime: shift.startTime,
     endTime: shift.endTime,
     status: shift.status,
+    shiftTotalHours: shift?.shiftTotalHours || null,
     createdAt: shift.createdAt,
 
     guard: {
@@ -2384,6 +2401,7 @@ export const requestOffStaticShift = async (req, res) => {
         shiftStartTime: assignment.static.startTime,
         shiftEndTime: assignment.static.endTime,
         shiftDate: assignment.static.startTime,
+        shiftTotalHours: assignment.static?.shiftTotalHours || null,
 
         // ✅ Separate request off status
         requestOffStatus: "pending",
@@ -2470,6 +2488,7 @@ export const requestChangeStaticShift = async (req, res) => {
         shiftStartTime: assignment.static.startTime,
         shiftEndTime: assignment.static.endTime,
         shiftDate: assignment.static.startTime,
+          shiftTotalHours: assignment.static?.shiftTotalHours || null,
 
         /* 🔄 CHANGE SHIFT REQUEST DATA */
         changeShiftStatus: "pending",
@@ -2555,6 +2574,7 @@ export const getTimeSheets = async (req, res) => {
       "description",
       "startTime",
       "endTime",
+      "shiftTotalHours"
     ],
      include: [
       {
@@ -2591,6 +2611,8 @@ export const getTimeSheets = async (req, res) => {
     return {
       shiftId: row.static.id,
       orderId: row.static.orderId,
+      shiftType: row.static?.type || null,
+      shiftTotalHours: row.static?.shiftTotalHours || null,
       // 📍 ORDER DETAILS
   serviceType: row.static.order?.serviceType || null,
   locationName: row.static.order?.locationName || null,
@@ -2684,6 +2706,7 @@ export const getStaticShiftDetailsForAdmin = async (req, res, next) => {
         "status",
         "startTime",
         "endTime",
+          "shiftTotalHours",
         "createdAt",
       ],
       include: [
@@ -2797,6 +2820,7 @@ export const getStaticShiftDetailsForAdmin = async (req, res, next) => {
           status: staticShift.status,
           startTime: staticShift.startTime,
           endTime: staticShift.endTime,
+            shiftTotalHours: staticShift?.shiftTotalHours || null,
           createdAt: staticShift.createdAt,
         },
 
@@ -2899,6 +2923,7 @@ const formattedShifts = upcomingShifts.map((shift) => {
     startTime: shift.startTime,
     endTime: shift.endTime,
     description: shift.description,
+    shiftTotalHours: shift?.shiftTotalHours || null,
 
     guard: guard
       ? {
