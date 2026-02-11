@@ -303,112 +303,147 @@ export const editSchedule = async (req, res, next) => {
       ? moment(endDate).format("YYYY-MM-DD")
       : moment(staticShift.endTime).tz(tz).format("YYYY-MM-DD");
 
-    const start = startTime
-      ? moment
-          .tz(`${normalizedStartDate} ${startTime}`, "YYYY-MM-DD HH:mm", tz)
-          .utc()
-          .toDate()
-      : staticShift.startTime;
+    /**
+     * 🕒 BUILD MOMENT OBJECTS (TIMEZONE SAFE)
+     */
+    const shiftStartMoment = startTime
+      ? moment.tz(
+          `${normalizedStartDate} ${startTime}`,
+          "YYYY-MM-DD HH:mm",
+          tz
+        )
+      : moment(staticShift.startTime).tz(tz);
 
-    const end = endTime
-      ? moment
-          .tz(`${normalizedEndDate} ${endTime}`, "YYYY-MM-DD HH:mm", tz)
-          .utc()
-          .toDate()
-      : staticShift.endTime;
+    const shiftEndMoment = endTime
+      ? moment.tz(
+          `${normalizedEndDate} ${endTime}`,
+          "YYYY-MM-DD HH:mm",
+          tz
+        )
+      : moment(staticShift.endTime).tz(tz);
 
     /**
-     * 🏗️ UPDATE SHIFT (NO STATUS CHANGE)
+     * 🌙 OVERNIGHT SHIFT HANDLING
+     * (If end is before start → add 1 day)
+     */
+    if (shiftEndMoment.isBefore(shiftStartMoment)) {
+      shiftEndMoment.add(1, "day");
+    }
+
+    /**
+     * ⏱️ CALCULATE TOTAL HOURS SAFELY
+     */
+    const totalMinutes = shiftEndMoment.diff(shiftStartMoment, "minutes");
+
+    if (totalMinutes <= 0) {
+      return next(
+        new ErrorHandler(
+          "Invalid shift timing. End time must be after start time.",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    const shiftTotalHours = Number((totalMinutes / 60).toFixed(2));
+
+    /**
+     * 🔄 CONVERT TO UTC FOR DB STORAGE
+     */
+    const start = shiftStartMoment.utc().toDate();
+    const end = shiftEndMoment.utc().toDate();
+
+    /**
+     * 🏗️ UPDATE SHIFT (INCLUDING TOTAL HOURS)
      */
     await staticShift.update({
       description: description ?? staticShift.description,
       startTime: start,
       endTime: end,
+      shiftTotalHours,
     });
 
-   if (Array.isArray(guardIds)) {
-  // 1️⃣ Validate guards
-  const guards = await User.findAll({ where: { id: guardIds } });
+    /**
+     * 👮 GUARD ASSIGNMENT LOGIC
+     */
+    if (Array.isArray(guardIds)) {
+      const guards = await User.findAll({ where: { id: guardIds } });
 
-  if (guards.length !== guardIds.length) {
-    return next(
-      new ErrorHandler(
-        "One or more guard IDs are invalid",
-        StatusCodes.BAD_REQUEST
-      )
-    );
-  }
+      if (guards.length !== guardIds.length) {
+        return next(
+          new ErrorHandler(
+            "One or more guard IDs are invalid",
+            StatusCodes.BAD_REQUEST
+          )
+        );
+      }
 
-  // 2️⃣ Fetch existing assignments
-  const existingAssignments = await StaticGuards.findAll({
-    where: { staticId: staticShift.id },
-  });
-
-  const existingGuardMap = new Map(
-    existingAssignments.map(a => [a.guardId, a])
-  );
-
-  const incomingGuardSet = new Set(guardIds);
-
-  const toCreate = [];
-  const toKeep = [];
-  const toRemove = [];
-
-  // 3️⃣ Identify NEW & EXISTING guards
-  for (const guardId of guardIds) {
-    if (existingGuardMap.has(guardId)) {
-      toKeep.push(existingGuardMap.get(guardId));
-    } else {
-      toCreate.push({
-        staticId: staticShift.id,
-        guardId,
-        status: "upcoming", // 👈 new guards start pending
+      const existingAssignments = await StaticGuards.findAll({
+        where: { staticId: staticShift.id },
       });
+
+      const existingGuardMap = new Map(
+        existingAssignments.map((a) => [a.guardId, a])
+      );
+
+      const incomingGuardSet = new Set(guardIds);
+
+      const toCreate = [];
+      const toRemove = [];
+
+      // Identify new guards
+      for (const guardId of guardIds) {
+        if (!existingGuardMap.has(guardId)) {
+          toCreate.push({
+            staticId: staticShift.id,
+            guardId,
+            status: "upcoming",
+          });
+        }
+      }
+
+      // Identify removed guards
+      for (const assignment of existingAssignments) {
+        if (!incomingGuardSet.has(assignment.guardId)) {
+          toRemove.push(assignment.guardId);
+        }
+      }
+
+      // Remove deleted guards
+      if (toRemove.length > 0) {
+        await StaticGuards.destroy({
+          where: {
+            staticId: staticShift.id,
+            guardId: toRemove,
+          },
+        });
+      }
+
+      // Add new guards
+      if (toCreate.length > 0) {
+        await StaticGuards.bulkCreate(toCreate);
+      }
+
+      // Notify only newly added guards
+      if (toCreate.length > 0) {
+        const notificationsPayload = toCreate.map(({ guardId }) => ({
+          userId: guardId,
+          role: "guard",
+          title: "New Shift Assigned",
+          message: "You have been assigned a new shift.",
+          type: "SHIFT_ASSIGNED",
+          data: {
+            shiftId: staticShift.id,
+            startTime: shiftStartMoment.format("HH:mm"),
+            endTime: shiftEndMoment.format("HH:mm"),
+            startDate: normalizedStartDate,
+            endDate: normalizedEndDate,
+            totalHours: shiftTotalHours,
+          },
+        }));
+
+        await Notification.bulkCreate(notificationsPayload);
+      }
     }
-  }
-
-  // 4️⃣ Identify REMOVED guards
-  for (const assignment of existingAssignments) {
-    if (!incomingGuardSet.has(assignment.guardId)) {
-      toRemove.push(assignment.guardId);
-    }
-  }
-
-  // 5️⃣ Remove deleted guards
-  if (toRemove.length > 0) {
-    await StaticGuards.destroy({
-      where: {
-        staticId: staticShift.id,
-        guardId: toRemove,
-      },
-    });
-  }
-
-  // 6️⃣ Create new guard assignments
-  if (toCreate.length > 0) {
-    await StaticGuards.bulkCreate(toCreate);
-  }
-
-  // 7️⃣ Notify ONLY newly added guards
-  if (toCreate.length > 0) {
-    const notificationsPayload = toCreate.map(({ guardId }) => ({
-      userId: guardId,
-      role: "guard",
-      title: "New Shift Assigned",
-      message: "You have been assigned a new shift.",
-      type: "SHIFT_ASSIGNED",
-      data: {
-        shiftId: staticShift.id,
-        startTime,
-        endTime,
-        startDate: normalizedStartDate,
-        endDate: normalizedEndDate,
-      },
-    }));
-
-    await Notification.bulkCreate(notificationsPayload);
-  }
-}
 
     /**
      * 📦 FETCH UPDATED SHIFT
@@ -438,7 +473,6 @@ export const editSchedule = async (req, res, next) => {
     });
   }
 };
-
 
 
 export const getAllSchedules = async (req, res, next) => {
