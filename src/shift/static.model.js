@@ -84,10 +84,4 @@ Static.hasMany(Incident, {
   as: "incidents",
 });
 
-
-
-
-
-
-
 export default Static;

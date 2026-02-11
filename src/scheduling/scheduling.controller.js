@@ -2792,6 +2792,117 @@ export const getStaticShiftDetailsForAdmin = async (req, res, next) => {
   }
 };
 
+export const getUpcomingShiftAlerts = async (req, res, next) => {
+  try {
+    const tz = getTimeZone();
+
+    // Current time in UTC (DB is stored in UTC)
+    const now = moment().tz(tz).utc();
+
+    // 30 minutes from now
+    const nextThirtyMinutes = moment(now).add(30, "minutes");
+
+    // ==============================
+    // Fetch shifts starting within 30 mins
+    // ==============================
+    const upcomingShifts = await Static.findAll({
+      where: {
+        status: "upcoming",
+        startTime: {
+          [Op.between]: [now.toDate(), nextThirtyMinutes.toDate()],
+        },
+      },
+      include: [
+        {
+          model: User,
+          as: "guards",
+          attributes: ["id", "name", "email"],
+          through: {
+            attributes: ["status"],
+          },
+        },
+        {
+            model: Order,
+          as: "order", // ✅ Correct alias
+          attributes: ["id", "locationName","description"],
+          include: [
+            {
+              model: User,
+              as: "user", // ✅ Must match your Order model association
+              attributes: ["id", "name", "email"],
+            },
+          ],
+        },
+      ],
+      order: [["startTime", "ASC"]],
+    });
+
+    // ==============================
+    //  Count
+    // ==============================
+    const count = upcomingShifts.length;
+
+    // ==============================
+    //  Format Response (Optional Clean Format)
+    // ==============================
+    // ==============================
+//  Format Response (Updated)
+// ==============================
+const formattedShifts = upcomingShifts.map((shift) => {
+  const guard = shift.guards?.[0];
+  const order = shift.order;
+  const client = order?.user;
+
+  return {
+    shiftId: shift.id,
+    date: shift.date,
+    startTime: shift.startTime,
+    endTime: shift.endTime,
+    description: shift.description,
+
+    guard: guard
+      ? {
+          id: guard.id,
+          name: guard.name,
+          email: guard.email,
+        }
+      : null,
+
+    order: order
+      ? {
+          id: order.id,
+          locationName: order.locationName,
+          description: order.description,
+          client: client
+            ? {
+                id: client.id,
+                name: client.name,
+                email: client.email,
+              }
+            : null,
+        }
+      : null,
+  };
+});
+
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      count,
+      data: formattedShifts,
+    });
+  } catch (error) {
+    console.error("GET UPCOMING SHIFT ALERTS ERROR:", error);
+    return next(
+      new ErrorHandler(
+        "Internal server error",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+
 
 
 
