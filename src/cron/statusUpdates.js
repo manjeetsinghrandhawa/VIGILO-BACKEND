@@ -142,7 +142,6 @@ cron.schedule("*/1 * * * *", async () => {
           [Op.in]: ["pending","upcoming", "ongoing","overtime_started"],
         },
       },
-      limit: 30,
       include: [
         {
           model: User,
