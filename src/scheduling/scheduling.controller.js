@@ -108,6 +108,8 @@ export const createSchedule = async (req, res, next) => {
         if (shiftEnd.isBefore(shiftStart)) {
           shiftEnd.add(1, "day");
         }
+        // ✅ Calculate total hours safely
+const shiftTotalHours = shiftEnd.diff(shiftStart, "minutes") / 60;
 
         const shiftStatus = today.isAfter(shiftEnd)
           ? "completed"
@@ -123,6 +125,7 @@ export const createSchedule = async (req, res, next) => {
           endTime: shiftEnd.utc().toDate(),
           type: "static",
           status: shiftStatus,
+          shiftTotalHours,
         });
 
         // ✅ Link only ONE guard to this shift
@@ -160,6 +163,8 @@ export const createSchedule = async (req, res, next) => {
           if (shiftEnd.isBefore(shiftStart)) {
             shiftEnd.add(1, "day");
           }
+          // ✅ Calculate total hours
+const shiftTotalHours = shiftEnd.diff(shiftStart, "minutes") / 60;
 
           const shiftStatus = today.isAfter(shiftEnd)
             ? "completed"
@@ -175,6 +180,7 @@ export const createSchedule = async (req, res, next) => {
             endTime: shiftEnd.utc().toDate(),
             type: "static",
             status: shiftStatus,
+            shiftTotalHours,
           });
 
           // ✅ Attach ONLY this guard

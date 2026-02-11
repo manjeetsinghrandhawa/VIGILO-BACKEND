@@ -59,6 +59,9 @@ endDate: {
         isDate: { msg: "Invalid end time" },
       },
     },
+    shiftTotalHours: {
+      type: DataTypes.FLOAT,
+    },
   },
   {
     timestamps: true,
