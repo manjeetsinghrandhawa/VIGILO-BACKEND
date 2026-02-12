@@ -2034,11 +2034,37 @@ export const startOvertime = async (req, res) => {
       }
     }
 
-    // ✅ START OVERTIME
+    if (ongoingOvertimeCase) {
+      if (!assignment.clockInTime) {
+        return res.status(400).json({
+          success: false,
+          message: "Clock-in time missing",
+        });
+      }
+      const clockInTime = new Date(assignment.clockInTime);
+
+
+      // ⏱ Calculate total hours (same logic as clockOut API)
+      const totalMs = now - clockInTime;
+      const totalHours = Number(
+        (totalMs / (1000 * 60 * 60)).toFixed(2)
+      );
+
+      assignment.clockOutTime = now;
+      assignment.totalHours = totalHours;
+      assignment.status = "completed";
+
+      await assignment.save();
+      await shift.update({ status: "completed" });
+    }
+
+    /**
+     * ✅ START OVERTIME
+     */
     assignment.status = "overtime_started";
     assignment.overtimeStartTime = now;
-    await assignment.save();
 
+    await assignment.save();
     await shift.update({ status: "overtime_started" });
 
     // 🔔 NOTIFICATIONS
@@ -2128,31 +2154,38 @@ export const endOvertime = async (req, res) => {
       });
     }
 
-    const now = new Date();
-    const clockIn = new Date(assignment.clockInTime);
-    const clockOut = new Date(assignment.clockOutTime);
 
-    // ⏱️ TEMP: Overtime starts from clockOutTime
+
+    if (!assignment.overtimeStartTime) {
+      return res.status(400).json({
+        success: false,
+        message: "Overtime start time missing",
+      });
+    }
+
+    const now = new Date();
+      const clockIn = new Date(assignment.clockInTime);
+    const clockOut = new Date(assignment.clockOutTime);
     const overtimeStart = new Date(assignment.overtimeStartTime);
 
-    const shiftMs = clockOut - clockIn;
+    // 🧮 OVERTIME CALCULATION
     const overtimeMs = now - overtimeStart;
-    const totalMs = shiftMs + overtimeMs;
-
-    const shiftDurationHours = Number(
-      (shiftMs / (1000 * 60 * 60)).toFixed(2)
-    );
     const overtimeDurationHours = Number(
       (overtimeMs / (1000 * 60 * 60)).toFixed(2)
     );
-    const totalWorkedHours = Number(
-      (totalMs / (1000 * 60 * 60)).toFixed(2)
+
+    // 📌 EXISTING SHIFT HOURS (already saved in startOvertime)
+    const existingShiftHours = Number(assignment.totalHours || 0);
+
+    // ✅ FINAL TOTAL HOURS
+    const finalTotalHours = Number(
+      (existingShiftHours + overtimeDurationHours).toFixed(2)
     );
 
     // ✅ SAVE OVERTIME END
     assignment.overtimeEndTime = now;
     assignment.overtimeHours = overtimeDurationHours;
-    assignment.totalHours = totalWorkedHours;
+    assignment.totalHours = finalTotalHours;
     assignment.status = "overtime_ended";
     await assignment.save();
 
@@ -2200,9 +2233,11 @@ export const endOvertime = async (req, res) => {
           overtimeEndTime: now,
         },
         duration: {
-          shiftHours: shiftDurationHours,
+          shiftHours: shift?.shiftTotalHours || null,
           overtimeHours: overtimeDurationHours,
-          totalWorkedHours,
+          totalWorkedHours: finalTotalHours,
+          totalHours,
+          totalHours:assignment.totalHours,
         },
       },
     });
