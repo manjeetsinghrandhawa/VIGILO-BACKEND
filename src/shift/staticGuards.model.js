@@ -96,7 +96,7 @@ requestOffActionedBy: {
 },
 
 changeShiftStatus: {
-  type: DataTypes.ENUM("pending", "approved", "rejected"),
+  type: DataTypes.ENUM("pending", "accepted", "rejected"),
   allowNull: true,
 },
 

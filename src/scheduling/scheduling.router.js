@@ -18,7 +18,8 @@ import {
   requestOffStaticShift,
   requestChangeStaticShift,
   getStaticShiftDetailsForAdmin,
-  getUpcomingShiftAlerts
+  getUpcomingShiftAlerts,
+  respondToChangeShiftRequest
   
 } from "./scheduling.controller.js";
 import { auth, isGaurd, isAdmin } from "../../middlewares/auth.js";
@@ -70,6 +71,8 @@ router.post("/requestChangeStaticShift",auth,isGaurd, requestChangeStaticShift )
 router.get("/getStaticShiftDetailsForAdmin/:id",auth,isAdmin, getStaticShiftDetailsForAdmin);
 
 router.get("/getUpcomingShiftAlerts",auth,isAdmin, getUpcomingShiftAlerts);
+
+router.post("/respondToChangeShiftRequest", auth, isAdmin, respondToChangeShiftRequest)
 
 
 

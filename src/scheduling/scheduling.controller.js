@@ -2235,9 +2235,8 @@ export const endOvertime = async (req, res) => {
         duration: {
           shiftHours: shift?.shiftTotalHours || null,
           overtimeHours: overtimeDurationHours,
-          totalWorkedHours: finalTotalHours,
-          totalHours,
-          totalHours:assignment.totalHours,
+          totalHours: finalTotalHours,
+          
         },
       },
     });
@@ -2751,16 +2750,25 @@ export const getStaticShiftDetailsForAdmin = async (req, res, next) => {
           as: "guards",
           attributes: ["id", "name", "email", "mobile"],
           through: {
-            attributes: [
-              "status",
-              "clockInTime",
-              "clockOutTime",
-              "overtimeStartTime",
-              "overtimeEndTime",
-              "overtimeHours",
-              "totalHours",
-            ],
-          },
+  attributes: [
+    "status",
+    "clockInTime",
+    "clockOutTime",
+    "overtimeStartTime",
+    "overtimeEndTime",
+    "overtimeHours",
+    "totalHours",
+
+    // 🆕 CHANGE SHIFT FIELDS
+    "changeShiftStatus",
+    "changeShiftDate",
+    "changeShiftStartTime",
+    "changeShiftEndTime",
+    "changeShiftReason",
+    "changeShiftRequestedAt",
+  ],
+},
+
         },
 
         /** 📍 Order / Client / Location */
@@ -2839,6 +2847,16 @@ export const getStaticShiftDetailsForAdmin = async (req, res, next) => {
             hours: t.overtimeHours ?? 0,
           },
         },
+        changeShiftRequest: t.changeShiftStatus
+      ? {
+          status: t.changeShiftStatus,
+          requestedDate: t.changeShiftDate,
+          requestedStartTime: t.changeShiftStartTime,
+          requestedEndTime: t.changeShiftEndTime,
+          reason: t.changeShiftReason,
+          requestedAt: t.changeShiftRequestedAt,
+        }
+      : null,
       };
     });
 
@@ -3003,6 +3021,102 @@ const formattedShifts = upcomingShifts.map((shift) => {
 };
 
 
+export const respondToChangeShiftRequest = async (req, res) => {
+  try {
+    const { staticId, guardId, action } = req.body;
+    const adminId = req.user?.id;
+
+    if (!adminId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    // 🔐 Ensure admin
+    const admin = await User.findByPk(adminId);
+    if (!admin || admin.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+
+    if (!staticId || !guardId || !action) {
+      return res.status(400).json({
+        success: false,
+        message: "staticId, guardId and action are required",
+      });
+    }
+
+    if (!["accepted", "rejected"].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: "Action must be 'accepted' or 'rejected'",
+      });
+    }
+
+    const assignment = await StaticGuards.findOne({
+      where: { staticId, guardId },
+      include: [
+        { model: User, as: "guard", attributes: ["id", "name"] },
+      ],
+    });
+
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        message: "Shift assignment not found",
+      });
+    }
+
+    if (assignment.changeShiftStatus !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "No pending change shift request",
+      });
+    }
+
+    // ✅ ONLY update request status
+    assignment.changeShiftStatus = action;
+    await assignment.save();
+
+    const now = new Date();
+
+    // 🔔 Notifications
+    await notifyGuardAndAdmin({
+      guardId,
+      shiftId: staticId,
+      status: `Change shift ${action}`,
+      type: "CHANGE_SHIFT_RESPONSE",
+      guardMessage:
+        action === "accepted"
+          ? "Your shift change request has been approved by admin."
+          : "Your shift change request has been rejected by admin.",
+      adminMessage: `You have ${action} the change shift request of guard ${
+        assignment.guard?.name || "Guard"
+      }.`,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Change shift request ${action} successfully`,
+      data: {
+        staticId,
+        guardId,
+        changeShiftStatus: action,
+        respondedAt: now,
+      },
+    });
+  } catch (error) {
+    console.error("RESPOND CHANGE SHIFT ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
 
 
 
