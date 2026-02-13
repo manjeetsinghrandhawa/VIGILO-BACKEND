@@ -420,8 +420,54 @@ export const editSchedule = async (req, res, next) => {
 
       // Add new guards
       if (toCreate.length > 0) {
-        await StaticGuards.bulkCreate(toCreate);
-      }
+  const newlyCreatedShifts = [];
+
+  for (const { guardId } of toCreate) {
+    // Create new shift copying existing shift data
+    const newShift = await Static.create({
+      orderId: staticShift.orderId,
+      description: staticShift.description,
+      date: normalizedStartDate,
+      endDate: normalizedEndDate,
+      startTime: start,
+      endTime: end,
+      type: staticShift.type,
+      status: staticShift.status,
+      shiftTotalHours,
+    });
+
+    // Assign ONLY this guard
+    await StaticGuards.create({
+      staticId: newShift.id,
+      guardId,
+      status: staticShift.status,
+    });
+
+    newlyCreatedShifts.push({ guardId, shift: newShift });
+  }
+
+  // 🔔 Notifications for each new shift
+  const notificationsPayload = newlyCreatedShifts.map(
+    ({ guardId, shift }) => ({
+      userId: guardId,
+      role: "guard",
+      title: "New Shift Assigned",
+      message: "You have been assigned a new shift.",
+      type: "SHIFT_ASSIGNED",
+      data: {
+        shiftId: shift.id,
+        startTime: shiftStartMoment.format("HH:mm"),
+        endTime: shiftEndMoment.format("HH:mm"),
+        startDate: normalizedStartDate,
+        endDate: normalizedEndDate,
+        totalHours: shiftTotalHours,
+      },
+    })
+  );
+
+  await Notification.bulkCreate(notificationsPayload);
+}
+
 
       // Notify only newly added guards
       if (toCreate.length > 0) {
