@@ -171,6 +171,8 @@ export const getOrderById = async (req, res, next) => {
             "startTime",
             "endTime",
             "status",
+            "description",
+            "shiftTotalHours",
           ],
           include: [
             {
