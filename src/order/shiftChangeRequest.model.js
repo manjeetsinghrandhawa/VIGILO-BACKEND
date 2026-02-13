@@ -38,7 +38,7 @@ const ShiftChangeRequest = sequelize.define(
     },
 
     status: {
-      type: DataTypes.ENUM("pending", "approved", "rejected"),
+      type: DataTypes.ENUM("pending", "accepted", "rejected"),
       defaultValue: "pending",
     },
 

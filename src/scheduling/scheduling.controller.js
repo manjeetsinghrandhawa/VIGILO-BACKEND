@@ -3330,7 +3330,119 @@ export const respondToRequestOffStaticShift = async (req, res) => {
   }
 };
 
+export const respondToUserShiftChangeRequest = async (req, res, next) => {
+  try {
+    const adminId = req.user?.id;
+    const { requestId, action, adminComment } = req.body;
 
+    if (!adminId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
+
+    // 🔐 Ensure admin
+    const admin = await User.findByPk(adminId);
+    if (!admin || admin.role !== "admin") {
+      return next(
+        new ErrorHandler("Access denied", StatusCodes.FORBIDDEN)
+      );
+    }
+
+    if (!requestId || !action) {
+      return next(
+        new ErrorHandler(
+          "requestId and action are required",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    if (!["accepted", "rejected"].includes(action)) {
+      return next(
+        new ErrorHandler(
+          "Action must be 'accepted' or 'rejected'",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    // 🔍 Find request
+    const request = await ShiftChangeRequest.findByPk(requestId, {
+      include: [
+        {
+          model: User,
+          as: "requester",
+          attributes: ["id", "name"],
+        },
+        {
+          model: Static,
+          as: "shift",
+          attributes: ["id", "startTime", "endTime"],
+        },
+      ],
+    });
+
+    if (!request) {
+      return next(
+        new ErrorHandler("Shift change request not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    if (request.status !== "pending") {
+      return next(
+        new ErrorHandler(
+          "This request has already been responded to",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    // ✅ Update request status
+    request.status = action;
+    request.adminComment = adminComment || null;
+    await request.save();
+
+    const now = new Date();
+
+    // 🔔 Send Notifications
+    await notifyGuardAndAdmin({
+      guardId: request.requestedBy,
+      shiftId: request.shiftId,
+      status: `shift_change_${action}`,
+      type: "SHIFT_CHANGE_RESPONSE",
+
+      guardMessage:
+        action === "accepted"
+          ? `Your shift change request has been approved by admin.`
+          : `Your shift change request has been rejected by admin.`,
+
+      adminMessage:
+        action === "accepted"
+          ? `You approved the shift change request of ${request.requester?.name}.`
+          : `You rejected the shift change request of ${request.requester?.name}.`,
+    });
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: `Shift change request ${action} successfully`,
+      data: {
+        requestId: request.id,
+        shiftId: request.shiftId,
+        requestedBy: request.requestedBy,
+        status: request.status,
+        adminComment: request.adminComment,
+        respondedAt: now,
+      },
+    });
+  } catch (error) {
+    console.error("RESPOND USER SHIFT CHANGE ERROR:", error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
 
 
 
