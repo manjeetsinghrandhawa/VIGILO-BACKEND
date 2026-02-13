@@ -13,6 +13,7 @@ import Incident from "../incident/incident.model.js";
 import Notification from "../notifications/notifications.model.js";
 import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
 import userModel from "../user/user.model.js";
+import ShiftChangeRequest from "../order/shiftChangeRequest.model.js";
 
 
 
@@ -2872,6 +2873,28 @@ export const getStaticShiftDetailsForAdmin = async (req, res, next) => {
             },
           ],
         },
+        /** 🔁 SHIFT CHANGE REQUESTS (User Requested) */
+{
+  model: ShiftChangeRequest,
+  as: "shiftChangeRequests",
+  attributes: [
+    "id",
+    "requestedStartTime",
+    "requestedEndTime",
+    "reason",
+    "status",
+    "adminComment",
+    "createdAt",
+  ],
+  include: [
+    {
+      model: User,
+      as: "requester",
+      attributes: ["id", "name", "email", "mobile"],
+    },
+  ],
+},
+
       ],
     });
 
@@ -2929,6 +2952,25 @@ export const getStaticShiftDetailsForAdmin = async (req, res, next) => {
       };
     });
 
+    /** 🧾 FORMAT FORMAL SHIFT CHANGE REQUESTS */
+    const shiftChangeRequests =
+      staticShift.shiftChangeRequests?.map((req) => ({
+        id: req.id,
+        status: req.status,
+        reason: req.reason,
+        requestedStartTime: req.requestedStartTime,
+        requestedEndTime: req.requestedEndTime,
+        requestedAt: req.createdAt,
+        adminComment: req.adminComment || null,
+
+        requestedBy: {
+          id: req.requester?.id,
+          name: req.requester?.name,
+          email: req.requester?.email,
+          phone: req.requester?.mobile,
+        },
+      })) || [];
+
     return res.status(StatusCodes.OK).json({
       success: true,
       message: "Shift details fetched successfully",
@@ -2965,6 +3007,7 @@ export const getStaticShiftDetailsForAdmin = async (req, res, next) => {
           : null,
 
         guards,
+        shiftChangeRequests, // ✅ NEW SECTION
 
         incidents: staticShift.incidents || [],
       },

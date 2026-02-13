@@ -4,6 +4,7 @@ import Order from "../order/order.model.js";
 import User from "../user/user.model.js";
 import Incident from "../incident/incident.model.js";
 
+
 const Static = sequelize.define(
   "Static",
   {
@@ -86,5 +87,8 @@ Static.hasMany(Incident, {
   foreignKey: "shiftId",
   as: "incidents",
 });
+
+
+
 
 export default Static;

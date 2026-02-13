@@ -16,6 +16,8 @@ import "./src/shift/staticGuards.model.js";
 import "./src/patrolling/patrolSite.model.js";
 import "./src/patrolling/patrolSubSite.model.js"
 import "./src/patrolling/patrolCheckpoint.model.js";
+import "./src/shift/static.model.js";
+import "./src/order/shiftChangeRequest.model.js";
 
 
 // 🔥 CALL ASSOCIATIONS AFTER ALL MODELS ARE LOADED
