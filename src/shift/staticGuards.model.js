@@ -59,7 +59,7 @@ const StaticGuards = sequelize.define(
 
     /* 🆕 REQUEST OFF STATUS (SEPARATE) */
 requestOffStatus: {
-  type: DataTypes.ENUM("none", "pending", "approved", "rejected"),
+  type: DataTypes.ENUM("none", "pending", "accepted", "rejected"),
   defaultValue: "none",
   allowNull: false,
 },

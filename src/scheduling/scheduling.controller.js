@@ -2812,6 +2812,15 @@ export const getStaticShiftDetailsForAdmin = async (req, res, next) => {
     "changeShiftEndTime",
     "changeShiftReason",
     "changeShiftRequestedAt",
+
+    // REQUEST OFF
+    "requestOffStatus",
+    "requestOffDate",
+    "requestOffReason",
+    "requestOffNotes",
+    "requestOffRequestedAt",
+    "requestOffActionedAt",
+    "requestOffActionedBy",
   ],
 },
 
@@ -2903,6 +2912,20 @@ export const getStaticShiftDetailsForAdmin = async (req, res, next) => {
           requestedAt: t.changeShiftRequestedAt,
         }
       : null,
+
+      requestOffRequest:
+  t.requestOffStatus && t.requestOffStatus !== "none"
+    ? {
+        status: t.requestOffStatus,
+        requestedDate: t.requestOffDate,
+        reason: t.requestOffReason,
+        notes: t.requestOffNotes,
+        requestedAt: t.requestOffRequestedAt,
+        actionedAt: t.requestOffActionedAt,
+        actionedBy: t.requestOffActionedBy,
+      }
+    : null,
+
       };
     });
 
@@ -3163,6 +3186,107 @@ export const respondToChangeShiftRequest = async (req, res) => {
     });
   }
 };
+
+export const respondToRequestOffStaticShift = async (req, res) => {
+  try {
+    const { staticId, guardId, action } = req.body;
+    const adminId = req.user?.id;
+
+    if (!adminId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    // 🔐 Ensure admin
+    const admin = await User.findByPk(adminId);
+    if (!admin || admin.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+
+    if (!staticId || !guardId || !action) {
+      return res.status(400).json({
+        success: false,
+        message: "staticId, guardId and action are required",
+      });
+    }
+
+    if (!["accepted", "rejected"].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: "Action must be 'accepted' or 'rejected'",
+      });
+    }
+
+    const assignment = await StaticGuards.findOne({
+      where: { staticId, guardId },
+      include: [
+        { model: User, as: "guard", attributes: ["id", "name"] },
+      ],
+    });
+
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        message: "Shift assignment not found",
+      });
+    }
+
+    if (assignment.requestOffStatus !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "No pending request off found",
+      });
+    }
+
+    const now = new Date();
+
+    // ✅ Update request off fields
+    assignment.requestOffStatus = action;
+    assignment.requestOffActionedAt = now;
+    assignment.requestOffActionedBy = adminId;
+
+    await assignment.save();
+
+    // 🔔 Notifications
+    await notifyGuardAndAdmin({
+      guardId,
+      shiftId: staticId,
+      status: `Request off ${action}`,
+      type: "REQUEST_OFF_RESPONSE",
+      guardMessage:
+        action === "accepted"
+          ? "Your shift-off request has been accepted by admin."
+          : "Your shift-off request has been rejected by admin.",
+      adminMessage: `You have ${action} the shift-off request of guard ${
+        assignment.guard?.name || "Guard"
+      }.`,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Shift-off request ${action} successfully`,
+      data: {
+        staticId,
+        guardId,
+        requestOffStatus: action,
+        respondedAt: now,
+      },
+    });
+  } catch (error) {
+    console.error("RESPOND REQUEST OFF ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
 
 
 
