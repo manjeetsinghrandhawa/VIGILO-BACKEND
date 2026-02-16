@@ -10,6 +10,7 @@ import PatrolCheckpoint from "./patrolCheckpoint.model.js";
 import QR from "./QR.model.js";
 import { s3Uploadv2 } from "../../utils/s3.js";
 import PatrolRun from "./patrolRun.model.js";
+import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
 
 
 export const createPatrolSite = async (req, res, next) => {
@@ -125,6 +126,12 @@ export const createPatrolSubSite = async (req, res, next) => {
       estimatedDuration,
       description,
     });
+
+    // 🔥 increment count
+await PatrolSite.increment(
+  { totalSubSites: 1 },
+  { where: { id: siteId } }
+);
 
     return res.status(StatusCodes.CREATED).json({
       success: true,
@@ -298,6 +305,28 @@ export const createCheckpoint = async (req, res, next) => {
       { transaction }
     );
 
+    if (siteId) {
+  await PatrolSite.increment(
+    { totalCheckpoints: 1 },
+    { where: { id: siteId }, transaction }
+  );
+}
+
+if (subSiteId) {
+  await PatrolSubSite.increment(
+    { totalCheckpoints: 1 },
+    { where: { id: subSiteId }, transaction }
+  );
+
+  // Also increment site totalCheckpoints
+  const sub = await PatrolSubSite.findByPk(subSiteId);
+  await PatrolSite.increment(
+    { totalCheckpoints: 1 },
+    { where: { id: sub.siteId }, transaction }
+  );
+}
+
+
     // =========================
     // 🔳 GENERATE QR DATA
     // =========================
@@ -430,30 +459,100 @@ export const createPatrolRun = async (req, res) => {
       startDateTime,
       estimatedCompletion,
       notes,
-      status,
       siteIds,
     } = req.body;
 
-    if (!patrolId || !startDateTime || !siteIds?.length) {
+    if (!patrolId || !guardId || !startDateTime || !siteIds?.length) {
       return res.status(400).json({
         success: false,
-        message: "Patrol ID, start time and at least one site required",
+        message:
+          "Patrol ID, Guard, start time and at least one site required",
       });
     }
 
-    // ✅ Validate site IDs exist
-    const existingSites = await PatrolSite.findAll({
-      where: { id: siteIds },
+    // ==============================
+    // 1️⃣ CHECK GUARD EXISTS
+    // ==============================
+    const guard = await User.findByPk(guardId);
+
+    if (!guard) {
+      return res.status(404).json({
+        success: false,
+        message: "Guard not found",
+      });
+    }
+
+    // ==============================
+    // 2️⃣ PREVENT MULTIPLE ACTIVE/SCHEDULED PATROLS
+    // ==============================
+    const existingPatrol = await PatrolRun.findOne({
+      where: {
+        guardId,
+        status: ["scheduled", "active"],
+      },
     });
 
-    if (existingSites.length !== siteIds.length) {
+    if (existingPatrol) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Guard already has an active or scheduled patrol run",
+      });
+    }
+
+    // ==============================
+    // 3️⃣ VALIDATE SITE IDS
+    // ==============================
+    const sites = await PatrolSite.findAll({
+      where: { id: siteIds },
+      include: [
+        {
+          model: PatrolSubSite,
+          as: "subSites",
+          include: [
+            {
+              model: PatrolCheckpoint,
+              as: "checkpoints",
+            },
+          ],
+        },
+        {
+          model: PatrolCheckpoint,
+          as: "checkpoints",
+        },
+      ],
+    });
+
+    if (sites.length !== siteIds.length) {
       return res.status(400).json({
         success: false,
         message: "One or more sites not found",
       });
     }
 
-    // ✅ Create Patrol Run
+    // ==============================
+    // 4️⃣ CALCULATE TOTAL COUNTS
+    // ==============================
+
+    let totalSites = sites.length;
+    let totalSubSites = 0;
+    let totalCheckpoints = 0;
+
+    sites.forEach((site) => {
+      totalSubSites += site.subSites?.length || 0;
+
+      // Checkpoints directly under site
+      totalCheckpoints += site.checkpoints?.length || 0;
+
+      // Checkpoints under subSites
+      site.subSites?.forEach((sub) => {
+        totalCheckpoints += sub.checkpoints?.length || 0;
+      });
+    });
+
+    // ==============================
+    // 5️⃣ CREATE PATROL RUN
+    // ==============================
     const patrolRun = await PatrolRun.create({
       patrolId,
       guardId,
@@ -461,8 +560,31 @@ export const createPatrolRun = async (req, res) => {
       startDateTime,
       estimatedCompletion,
       notes,
-      status,
-      siteIds, // 🔥 store array directly
+      siteIds,
+
+      // lifecycle
+      status: "scheduled",
+      approvalStatus: "pending",
+
+      // counters
+      totalSites,
+      totalSubSites,
+      totalCheckpoints,
+      completedSites: 0,
+      completedSubSites: 0,
+      completedCheckpoints: 0,
+    });
+
+    // ==============================
+    // 6️⃣ SEND NOTIFICATION TO GUARD
+    // ==============================
+    await notifyGuardAndAdmin({
+      guardId,
+      patrolRunId: patrolRun.id,
+      status: "patrol_assigned",
+      type: "PATROL_ASSIGNED",
+      guardMessage: `You have been assigned a new patrol run (${patrolId}).`,
+      adminMessage: `Patrol ${patrolId} assigned to ${guard.name}.`,
     });
 
     return res.status(201).json({
@@ -479,6 +601,7 @@ export const createPatrolRun = async (req, res) => {
     });
   }
 };
+
 
 export const deletePatrolSite = async (req, res, next) => {
   try {

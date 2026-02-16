@@ -34,28 +34,66 @@ const PatrolRun = sequelize.define(
 
     estimatedCompletion: {
       type: DataTypes.DATE,
-      allowNull: true,
     },
 
+    // 🔵 Execution lifecycle
     status: {
       type: DataTypes.ENUM("pending", "scheduled", "active", "completed"),
       defaultValue: "scheduled",
     },
 
+    // 🟡 Approval lifecycle (like static shift)
+    approvalStatus: {
+      type: DataTypes.ENUM("pending", "accepted", "rejected"),
+      defaultValue: "pending",
+    },
+
+    // 🔢 Execution tracking
+    totalCheckpoints: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+    },
+
+    completedCheckpoints: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+    },
+
+    totalSubSites: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+    },
+
+    completedSubSites: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+    },
+
+    totalSites: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+    },
+
+    completedSites: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+    },
+
     notes: {
       type: DataTypes.TEXT,
     },
-    siteIds: {
-  type: DataTypes.JSON,   // or ARRAY(UUID) if using Postgres
-  allowNull: false,
-},
 
+    siteIds: {
+      type: DataTypes.JSON,
+      allowNull: false,
+    },
   },
   {
     tableName: "PatrolRuns",
     timestamps: true,
   }
 );
+
 
 User.hasMany(PatrolRun, {
   foreignKey: "guardId",

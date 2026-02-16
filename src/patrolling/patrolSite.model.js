@@ -52,6 +52,21 @@ const PatrolSite = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: true,
     },
+    isCompleted: {
+  type: DataTypes.BOOLEAN,
+  defaultValue: false,
+},
+totalSubSites: {
+  type: DataTypes.INTEGER,
+  defaultValue: 0,
+},
+
+totalCheckpoints: {
+  type: DataTypes.INTEGER,
+  defaultValue: 0,
+},
+
+
   },
   {
     tableName: "PatrolSites",

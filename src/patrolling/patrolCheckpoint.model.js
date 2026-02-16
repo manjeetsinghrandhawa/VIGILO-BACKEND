@@ -51,6 +51,28 @@ const PatrolCheckpoint = sequelize.define(
     description: {
       type: DataTypes.TEXT,
     },
+    patrolRunId: {
+  type: DataTypes.UUID,
+  allowNull: true,
+},
+
+isCompleted: {
+  type: DataTypes.BOOLEAN,
+  defaultValue: false,
+},
+
+completedAt: {
+  type: DataTypes.DATE,
+},
+
+scannedBy: {
+  type: DataTypes.UUID,
+},
+
+scannedAt: {
+  type: DataTypes.DATE,
+},
+
   },
   {
     tableName: "PatrolCheckpoints",

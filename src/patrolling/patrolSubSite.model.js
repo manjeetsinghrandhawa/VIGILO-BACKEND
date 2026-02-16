@@ -34,6 +34,16 @@ const PatrolSubSite = sequelize.define(
     description: {
       type: DataTypes.TEXT,
     },
+    isCompleted: {
+  type: DataTypes.BOOLEAN,
+  defaultValue: false,
+},
+totalCheckpoints: {
+  type: DataTypes.INTEGER,
+  defaultValue: 0,
+},
+
+
   },
   {
     tableName: "PatrolSubSites",
