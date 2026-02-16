@@ -51,11 +51,31 @@ const StaticGuards = sequelize.define(
         // 🆕 REQUEST OFF
     "request_off_pending",
     "request_off_approved",
-    "request_off_rejected"
+    "request_off_rejected",
+
+    //patrolling
+    "scheduled",
+    "active",
+    "ended",
       ),
       allowNull: false,
       defaultValue: "pending",
     },
+    patrolId: {
+  type: DataTypes.INTEGER,
+  allowNull: true,
+},
+
+patrolRunId: {
+  type: DataTypes.INTEGER,
+  allowNull: true,
+},
+
+shiftType: {
+  type: DataTypes.ENUM("static", "patrol"),
+  allowNull: true,
+  defaultValue: "static",
+},
 
     /* 🆕 REQUEST OFF STATUS (SEPARATE) */
 requestOffStatus: {

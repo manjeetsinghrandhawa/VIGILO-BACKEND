@@ -14,6 +14,10 @@ import Notification from "../notifications/notifications.model.js";
 import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
 import userModel from "../user/user.model.js";
 import ShiftChangeRequest from "../order/shiftChangeRequest.model.js";
+import PatrolRun from "../patrolling/patrolRun.model.js";
+import PatrolGuards from "../patrolling/PatrolGuards.model.js";
+
+
 
 
 
@@ -817,6 +821,72 @@ export const getMyAllShifts = async (req, res, next) => {
         },
       });
     }
+    // **
+    //  * 🔹 FETCH PATROL RUNS (ONLY FOR ALL + NEW REQUESTS)
+    //  */
+    let patrolResponse = [];
+
+    if (filter === "all" || filter === "newRequests") {
+      const patrolRuns = await PatrolRun.findAll({
+        where: {
+          status: "scheduled",
+          approvalStatus: "pending",
+        },
+        include: [
+          {
+            model: User,
+            as: "guards",
+            where: { id: guardId },
+            attributes: ["id", "name", "email"],
+            through: {
+              attributes: ["status", "createdAt"],
+            },
+            required: true,
+          },
+        ],
+        order: [["startDateTime", "DESC"]],
+      });
+
+      patrolResponse = patrolRuns.map((run) => {
+        const guard = run.guards[0];
+        const assignmentStatus = guard.PatrolGuards?.status;
+
+        return {
+          id: run.id,
+          orderId: null,
+          orderLocationName: null,
+          orderLocationAddress: null,
+          date: moment.utc(run.startDateTime).format("YYYY-MM-DD"),
+          type: "patrol",
+          description: run.notes || "Patrol Run",
+          startTime: run.startDateTime,
+          endTime: run.estimatedCompletion,
+          status: run.status,
+          shiftTotalHours: null,
+          createdAt: run.createdAt,
+          guard: {
+            id: guard.id,
+            name: guard.name,
+            email: guard.email,
+            assignmentStatus,
+            assignedAt: guard.PatrolGuards?.createdAt,
+          },
+        };
+      });
+    }
+
+    /**
+     * 🔥 MERGE STATIC + PATROL
+     */
+    let combined = [...response, ...patrolResponse];
+
+    combined.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+
+    /**
+     * 🔹 PAGINATION AFTER MERGE
+     */
+    const totalCombined = combined.length;
+    const paginatedData = combined.slice(offset, offset + limit);
 
     return res.status(StatusCodes.OK).json({
       success: true,
@@ -827,11 +897,11 @@ export const getMyAllShifts = async (req, res, next) => {
         upcoming: upcomingCount,
         newRequests: newRequestsCount,
       },
-      data: response,
+      data: paginatedData,
       pagination: {
-        total: count,
+        total: totalCombined,
         page,
-        totalPages: Math.ceil(count / limit),
+        totalPages: Math.ceil(totalCombined / limit),
         limit,
       },
     });
@@ -2373,7 +2443,7 @@ const shifts = await Static.findAll({
 });
 
 
-    const response = shifts.map((shift) => {
+    const staticResponse = shifts.map((shift) => {
   const guard = shift.guards[0];
 
   return {
@@ -2403,13 +2473,76 @@ const shifts = await Static.findAll({
   };
 });
 
+/**
+     * ================================
+     * 🔹 FETCH PATROL RUNS (NEW)
+     * ================================
+     */
+    const patrolRuns = await PatrolRun.findAll({
+      where: {
+        startDateTime: {
+          [Op.between]: [startOfDay, endOfDay],
+        },
+      },
+      include: [
+        {
+          model: User,
+          as: "guards",
+          where: { id: guardId },
+          attributes: ["id", "name", "email"],
+          through: {
+            attributes: ["status", "createdAt"],
+          },
+          required: true,
+        },
+      ],
+      order: [["startDateTime", "ASC"]],
+    });
+
+    const patrolResponse = patrolRuns.map((run) => {
+      const guard = run.guards[0];
+
+      return {
+        id: run.id,
+        orderId: null,
+        orderLocationName: null,
+        orderLocationAddress: null,
+        date: moment(run.startDateTime).tz(tz).format("YYYY-MM-DD"),
+        type: "patrol",
+        description: run.notes || "Patrol Run",
+        startTime: run.startDateTime,
+        endTime: run.estimatedCompletion,
+        status: run.status,
+        shiftTotalHours: null,
+        createdAt: run.createdAt,
+        guard: {
+          id: guard.id,
+          name: guard.name,
+          email: guard.email,
+          assignmentStatus: guard.PatrolGuards?.status,
+          assignedAt: guard.PatrolGuards?.createdAt,
+        },
+        incidents: [], // patrol has no static incidents
+        incidentsCount: 0,
+      };
+    });
+
+    /**
+     * ================================
+     * 🔥 MERGE STATIC + PATROL
+     * ================================
+     */
+    const combined = [...staticResponse, ...patrolResponse];
+
+    combined.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+
 
     return res.status(StatusCodes.OK).json({
       success: true,
       message: "Shifts fetched successfully for selected date",
       date,
-      count: response.length,
-      data: response,
+      count: combined.length,
+      data: combined,
     });
   } catch (error) {
     console.error("GET MY SHIFTS BY DATE ERROR:", error.stack || error);

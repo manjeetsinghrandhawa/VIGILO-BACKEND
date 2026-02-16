@@ -1,6 +1,7 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../../config/database.js";
 import User from "../user/user.model.js";
+import Order from "../order/order.model.js";
 
 const PatrolRun = sequelize.define(
   "PatrolRun",
@@ -16,6 +17,16 @@ const PatrolRun = sequelize.define(
       allowNull: false,
       unique: true,
     },
+    orderId: {
+  type: DataTypes.UUID,
+  allowNull: true,
+  references: {
+    model: "orders",
+    key: "id",
+  },
+  onDelete: "CASCADE",
+},
+
 
     guardId: {
       type: DataTypes.UUID,
@@ -97,12 +108,28 @@ const PatrolRun = sequelize.define(
 
 User.hasMany(PatrolRun, {
   foreignKey: "guardId",
-  as: "patrolRuns",
+  as: "patrolRun",
 });
 
 PatrolRun.belongsTo(User, {
   foreignKey: "guardId",
   as: "guard",
+});
+
+/**
+ * ===========================
+ * 🔗 PATROL RUN ↔ ORDER
+ * ===========================
+ */
+
+Order.hasMany(PatrolRun, {
+  foreignKey: "orderId",
+  as: "patrolRuns",
+});
+
+PatrolRun.belongsTo(Order, {
+  foreignKey: "orderId",
+  as: "order",
 });
 
 export default PatrolRun;
