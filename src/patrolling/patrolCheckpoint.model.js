@@ -63,21 +63,25 @@ const PatrolCheckpoint = sequelize.define(
 PatrolSite.hasMany(PatrolCheckpoint, {
   foreignKey: "siteId",
   as: "checkpoints",
+  onDelete: "CASCADE",
 });
 
 PatrolSubSite.hasMany(PatrolCheckpoint, {
   foreignKey: "subSiteId",
   as: "checkpoints",
+  onDelete: "CASCADE",
 });
 
 PatrolCheckpoint.belongsTo(PatrolSite, {
   foreignKey: "siteId",
   as: "site",
+  onDelete: "CASCADE",
 });
 
 PatrolCheckpoint.belongsTo(PatrolSubSite, {
   foreignKey: "subSiteId",
   as: "subSite",
+  onDelete: "CASCADE",
 });
 
 export default PatrolCheckpoint;

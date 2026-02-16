@@ -9,6 +9,9 @@ import sequelize from "../../config/database.js";
 import PatrolCheckpoint from "./patrolCheckpoint.model.js";
 import QR from "./QR.model.js";
 import { s3Uploadv2 } from "../../utils/s3.js";
+import PatrolRun from "./patrolRun.model.js";
+
+
 export const createPatrolSite = async (req, res, next) => {
   try {
     const userId = req.user?.id;
@@ -415,6 +418,65 @@ export const getCheckpoints = async (req, res, next) => {
   } catch (error) {
     console.error("GET CHECKPOINTS ERROR:", error);
     next(error);
+  }
+};
+
+export const createPatrolRun = async (req, res) => {
+  try {
+    const {
+      patrolId,
+      guardId,
+      vehicleId,
+      startDateTime,
+      estimatedCompletion,
+      notes,
+      status,
+      siteIds,
+    } = req.body;
+
+    if (!patrolId || !startDateTime || !siteIds?.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Patrol ID, start time and at least one site required",
+      });
+    }
+
+    // ✅ Validate site IDs exist
+    const existingSites = await PatrolSite.findAll({
+      where: { id: siteIds },
+    });
+
+    if (existingSites.length !== siteIds.length) {
+      return res.status(400).json({
+        success: false,
+        message: "One or more sites not found",
+      });
+    }
+
+    // ✅ Create Patrol Run
+    const patrolRun = await PatrolRun.create({
+      patrolId,
+      guardId,
+      vehicleId,
+      startDateTime,
+      estimatedCompletion,
+      notes,
+      status,
+      siteIds, // 🔥 store array directly
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Patrol run created successfully",
+      data: patrolRun,
+    });
+
+  } catch (error) {
+    console.error("CREATE PATROL RUN ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 };
 
