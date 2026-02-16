@@ -480,5 +480,123 @@ export const createPatrolRun = async (req, res) => {
   }
 };
 
+export const deletePatrolSite = async (req, res, next) => {
+  try {
+    const { siteId } = req.params;
+
+    const site = await PatrolSite.findByPk(siteId);
+
+    if (!site) {
+      return next(
+        new ErrorHandler("Patrol site not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    await site.destroy(); // soft delete
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Patrol site deleted successfully",
+    });
+
+  } catch (error) {
+    console.error("DELETE PATROL SITE ERROR:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to delete patrol site",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+export const deletePatrolSubSite = async (req, res, next) => {
+  try {
+    const { subSiteId } = req.params;
+
+    const subSite = await PatrolSubSite.findByPk(subSiteId);
+
+    if (!subSite) {
+      return next(
+        new ErrorHandler("Sub-site not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    await subSite.destroy(); // soft delete
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Sub-site deleted successfully",
+    });
+
+  } catch (error) {
+    console.error("DELETE PATROL SUB-SITE ERROR:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to delete sub-site",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+export const deleteCheckpoint = async (req, res, next) => {
+  try {
+    const { checkpointId } = req.params;
+
+    const checkpoint = await PatrolCheckpoint.findByPk(checkpointId);
+
+    if (!checkpoint) {
+      return next(
+        new ErrorHandler("Checkpoint not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    await checkpoint.destroy(); // soft delete
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Checkpoint deleted successfully",
+    });
+
+  } catch (error) {
+    console.error("DELETE CHECKPOINT ERROR:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to delete checkpoint",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+export const deletePatrolRun = async (req, res) => {
+  try {
+    const { patrolId } = req.params;
+
+    const patrolRun = await PatrolRun.findByPk(patrolId);
+
+    if (!patrolRun) {
+      return res.status(404).json({
+        success: false,
+        message: "Patrol run not found",
+      });
+    }
+
+    await patrolRun.destroy(); // hard delete
+
+    return res.status(200).json({
+      success: true,
+      message: "Patrol run deleted successfully",
+    });
+
+  } catch (error) {
+    console.error("DELETE PATROL RUN ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
 
 

@@ -38,7 +38,7 @@ const PatrolRun = sequelize.define(
     },
 
     status: {
-      type: DataTypes.ENUM("scheduled", "active", "completed"),
+      type: DataTypes.ENUM("pending", "scheduled", "active", "completed"),
       defaultValue: "scheduled",
     },
 
