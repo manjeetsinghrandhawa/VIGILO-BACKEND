@@ -9,6 +9,8 @@ import StaticGuards from "./staticGuards.model.js";
 import User from "../user/user.model.js";
 import Incident from "../incident/incident.model.js";
 import Notification from "../notifications/notifications.model.js";
+import PatrolRun from "../patrolling/patrolRun.model.js";
+import PatrolGuards from "../patrolling/PatrolGuards.model.js";
 
 export const assignShift = catchAsyncError(async (req, res, next) => {
   const { orderId } = req.params;
@@ -314,133 +316,177 @@ await Notification.bulkCreate(
 };
 
 
-export const getStaticShiftById = async (req, res, next) => {
-  const { id } = req.params;
-  const guardId = req.user?.id;
+export const getMyShiftDetails = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const guardId = req.user?.id;
 
-  if (!guardId) {
-    return next(
-      new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
-    );
-  }
+    if (!guardId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
 
-  const staticShift = await Static.findByPk(id, {
-    attributes: [
-      "id",
-      "orderId",
-      "type",
-      "description",
-      "startTime",
-      "endTime",
-      "status",
-      "createdAt",
-      "updatedAt",
-    ],
-    include: [
-      /** 🔹 Guard assignment (pivot data) */
-      {
-        model: User,
-        as: "guards",
-        where: { id: guardId },
-        required: true,
-        attributes: ["id", "name", "email"],
-        through: {
+    /**
+     * =========================================
+     * 🔹 1️⃣ TRY FINDING STATIC SHIFT FIRST
+     * =========================================
+     */
+    const staticShift = await Static.findOne({
+      where: { id },
+      attributes: [
+        "id",
+        "orderId",
+        "type",
+        "description",
+        "startTime",
+        "endTime",
+        "status",
+        "createdAt",
+        "updatedAt",
+      ],
+      include: [
+        {
+          model: User,
+          as: "guards",
+          where: { id: guardId },
+          required: true,
+          attributes: ["id", "name", "email"],
+          through: {
+            attributes: [
+              "status",
+              "clockInTime",
+              "clockOutTime",
+              "overtimeStartTime",
+              "overtimeEndTime",
+              "overtimeHours",
+              "totalHours",
+              "createdAt",
+            ],
+          },
+        },
+        {
+          model: Order,
+          as: "order",
+          attributes: ["locationName", "locationAddress", "images","serviceType"],
+        },
+        {
+          model: Incident,
+          as: "incidents",
           attributes: [
-            "status",
-            "clockInTime",
-            "clockOutTime",
-            "overtimeStartTime",
-            "overtimeEndTime",
-            "overtimeHours",
-            "totalHours",
+            "id",
+            "name",
+            "location",
+            "description",
+            "images",
             "createdAt",
-            "updatedAt",
+          ],
+          include: [
+            {
+              model: User,
+              as: "reporter",
+              attributes: ["id", "name", "email"],
+            },
           ],
         },
-      },
+      ],
+    });
 
-      /** 🔹 Order / site info */
-      {
-        model: Order,
-        as: "order",
-        attributes: ["locationName", "locationAddress", "images"],
-      },
+    if (staticShift) {
+      const guard = staticShift.guards[0];
+      const pivot = guard.StaticGuards;
 
-      /** 🔹 Incidents of this shift */
-      {
-        model: Incident,
-        as: "incidents",
-        attributes: [
-          "id",
-          "name",
-          "location",
-          "description",
-          "images",
-          "createdAt",
-        ],
-        include: [
-          {
-            model: User,
-            as: "reporter",
-            attributes: ["id", "name", "email"],
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        type: "static",
+        data: {
+          shift: staticShift,
+          order: staticShift.order,
+          guard: {
+            id: guard.id,
+            name: guard.name,
+            email: guard.email,
+            assignment: pivot,
           },
-        ],
-      },
-    ],
-  });
-
-  if (!staticShift) {
-    return next(new ErrorHandler("Shift not found", StatusCodes.NOT_FOUND));
-  }
-
-  /** 🔹 Extract guard + pivot */
-  const guard = staticShift.guards[0];
-  const pivot = guard.StaticGuards;
-
-  res.status(StatusCodes.OK).json({
-    success: true,
-    message: "Shift fetched successfully",
-    data: {
-      shift: {
-        id: staticShift.id,
-        type: staticShift.type,
-        description: staticShift.description,
-        status: staticShift.status,
-        startTime: staticShift.startTime,
-        endTime: staticShift.endTime,
-      },
-
-      order: staticShift.order
-        ? {
-            locationName: staticShift.order.locationName,
-            locationAddress: staticShift.order.locationAddress,
-            images: staticShift.order.images || [],
-          }
-        : null,
-
-      guard: {
-        id: guard.id,
-        name: guard.name,
-        email: guard.email,
-
-        assignment: {
-          status: pivot.status,
-          clockInTime: pivot.clockInTime,
-          clockOutTime: pivot.clockOutTime,
-
-          overtime: {
-            startTime: pivot.overtimeStartTime,
-            endTime: pivot.overtimeEndTime,
-            hours: pivot.overtimeHours,
-          },
-
-          totalHours: pivot.totalHours,
+          incidents: staticShift.incidents || [],
         },
-      },
+      });
+    }
 
-      incidents: staticShift.incidents || [],
-    },
-  });
+    /**
+     * =========================================
+     * 🔹 2️⃣ IF NOT STATIC → CHECK PATROL RUN
+     * =========================================
+     */
+    const patrolRun = await PatrolRun.findOne({
+      where: { id },
+      include: [
+        {
+          model: User,
+          as: "guards",
+          where: { id: guardId },
+          required: true,
+          attributes: ["id", "name", "email"],
+          through: {
+            attributes: ["status", "createdAt"],
+          },
+        },
+        {
+          model: Order,
+          as: "order",
+          attributes: ["locationName", "locationAddress", "images", "serviceType"],
+        },
+      ],
+    });
+
+    if (patrolRun) {
+      const guard = patrolRun.guards[0];
+      const pivot = guard.PatrolGuards;
+
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        type: "patrol",
+        data: {
+          patrol: {
+            id: patrolRun.id,
+            patrolId: patrolRun.patrolId,
+            vehicleId: patrolRun.vehicleId,
+            description: patrolRun.notes,
+            status: patrolRun.status,
+            startTime: patrolRun.startDateTime,
+            endTime: patrolRun.estimatedCompletion,
+            totalSites: patrolRun.totalSites,
+            totalSubSites: patrolRun.totalSubSites,
+            totalCheckpoints: patrolRun.totalCheckpoints,
+            completedSites: patrolRun.completedSites,
+            completedSubSites: patrolRun.completedSubSites,
+            completedCheckpoints: patrolRun.completedCheckpoints,
+          },
+          order: patrolRun.order,
+          guard: {
+            id: guard.id,
+            name: guard.name,
+            email: guard.email,
+            assignmentStatus: pivot.status,
+            assignedAt: pivot.createdAt,
+          },
+        },
+      });
+    }
+
+    /**
+     * ❌ NOT FOUND ANYWHERE
+     */
+    return next(new ErrorHandler("Shift not found", StatusCodes.NOT_FOUND));
+
+  } catch (error) {
+    console.error("GET SHIFT DETAILS ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
 };
 
 
