@@ -50,7 +50,7 @@ const PatrolSite = sequelize.define(
 
     isActive: {
       type: DataTypes.BOOLEAN,
-      defaultValue: flase,
+      defaultValue: true,
     },
     isCompleted: {
   type: DataTypes.BOOLEAN,
