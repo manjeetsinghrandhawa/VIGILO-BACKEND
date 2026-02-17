@@ -2492,58 +2492,80 @@ const shifts = await Static.findAll({
 });
 
 /**
-     * ================================
-     * 🔹 FETCH PATROL RUNS (NEW)
-     * ================================
-     */
-    const patrolRuns = await PatrolRun.findAll({
-      where: {
-        startDateTime: {
-          [Op.between]: [startOfDay, endOfDay],
-        },
+ * ================================
+ * 🔹 FETCH PATROL RUNS (UPDATED LIKE getMyAllShifts)
+ * ================================
+ */
+const patrolRuns = await PatrolRun.findAll({
+  where: {
+    startDateTime: {
+      [Op.between]: [startOfDay, endOfDay],
+    },
+  },
+  include: [
+    {
+      model: User,
+      as: "guards",
+      where: { id: guardId },
+      attributes: ["id", "name", "email"],
+      through: {
+        attributes: ["status", "createdAt"],
       },
-      include: [
-        {
-          model: User,
-          as: "guards",
-          where: { id: guardId },
-          attributes: ["id", "name", "email"],
-          through: {
-            attributes: ["status", "createdAt"],
-          },
-          required: true,
-        },
-      ],
-      order: [["startDateTime", "ASC"]],
-    });
+      required: true,
+    },
+    {
+      model: Order,
+      as: "order",
+      attributes: ["locationName", "locationAddress", "serviceType"],
+    },
+  ],
+  order: [["startDateTime", "ASC"]],
+});
 
-    const patrolResponse = patrolRuns.map((run) => {
-      const guard = run.guards[0];
+const patrolResponse = patrolRuns.map((run) => {
+  const guard = run.guards[0];
+  const guardStatus = guard?.PatrolGuards?.status;
 
-      return {
-        id: run.id,
-        orderId: null,
-        orderLocationName: null,
-        orderLocationAddress: null,
-        date: moment(run.startDateTime).tz(tz).format("YYYY-MM-DD"),
-        type: "patrol",
-        description: run.notes || "Patrol Run",
-        startTime: run.startDateTime,
-        endTime: run.estimatedCompletion,
-        status: run.status,
-        shiftTotalHours: null,
-        createdAt: run.createdAt,
-        guard: {
-          id: guard.id,
-          name: guard.name,
-          email: guard.email,
-          assignmentStatus: guard.PatrolGuards?.status,
-          assignedAt: guard.PatrolGuards?.createdAt,
-        },
-        incidents: [], // patrol has no static incidents
-        incidentsCount: 0,
-      };
-    });
+  return {
+    id: run.id,
+    patrolId: run.patrolId,
+    vehicleId: run.vehicleId,
+    orderId: run.orderId,
+
+    orderLocationName: run.order?.locationName || null,
+    orderLocationAddress: run.order?.locationAddress || null,
+
+    date: moment(run.startDateTime).tz(tz).format("YYYY-MM-DD"),
+    type: run.order?.serviceType || "patrol",
+    description: run.notes || "Patrol Run",
+
+    startTime: run.startDateTime,
+    endTime: run.estimatedCompletion,
+    status: run.status,
+
+    shiftTotalHours: null,
+    createdAt: run.createdAt,
+
+    totalSites: run.totalSites,
+    totalSubSites: run.totalSubSites,
+    totalCheckpoints: run.totalCheckpoints,
+    completedSites: run.completedSites,
+    completedSubSites: run.completedSubSites,
+    completedCheckpoints: run.completedCheckpoints,
+
+    guard: {
+      id: guard?.id,
+      name: guard?.name,
+      email: guard?.email,
+      guardStatus: guardStatus || "unknown",
+      assignedAt: guard?.PatrolGuards?.createdAt,
+    },
+
+    incidents: [], // Patrol has no static incidents
+    incidentsCount: 0,
+  };
+});
+
 
     /**
      * ================================
