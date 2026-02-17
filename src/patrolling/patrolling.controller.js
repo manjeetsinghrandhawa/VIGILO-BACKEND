@@ -13,6 +13,7 @@ import PatrolRun from "./patrolRun.model.js";
 import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
 import PatrolGuards from "./PatrolGuards.model.js";
 import Order from "../order/order.model.js";
+import { Op } from "sequelize";
 
 
 export const createPatrolSite = async (req, res, next) => {
@@ -609,7 +610,7 @@ if (!order) {
       estimatedCompletion,
       notes,
       siteIds,
-      status: "scheduled",
+      status: "pending",
       approvalStatus: "pending",
       totalSites,
       totalSubSites,
@@ -625,7 +626,7 @@ if (!order) {
     await PatrolGuards.create({
   patrolRunId: patrolRun.id,
   guardId,
-  status: "scheduled",
+  status: "pending",
 });
 
 

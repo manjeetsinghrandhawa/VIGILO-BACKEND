@@ -827,50 +827,68 @@ export const getMyAllShifts = async (req, res, next) => {
     let patrolResponse = [];
 
     if (filter === "all" || filter === "newRequests") {
+      let patrolWhere = { guardId };
+
+  // 🔥 Only pending for newRequests
+  if (filter === "newRequests") {
+    patrolWhere.status = "pending";
+  }
       const patrolRuns = await PatrolRun.findAll({
-        where: {
-          status: "scheduled",
-          approvalStatus: "pending",
-        },
+        where: patrolWhere,
         include: [
           {
             model: User,
             as: "guards",
-            where: { id: guardId },
+             where: { id: guardId },
             attributes: ["id", "name", "email"],
-            through: {
-              attributes: ["status", "createdAt"],
-            },
-            required: true,
-          },
-        ],
+           through: {
+          where: patrolWhere,
+          attributes: ["status", "createdAt"],
+        },
+        required: true,
+      },
+        {
+        model: Order,
+        as: "order",
+        attributes: ["locationName", "locationAddress"],
+      },
+    ],
         order: [["startDateTime", "DESC"]],
       });
 
       patrolResponse = patrolRuns.map((run) => {
         const guard = run.guards[0];
-        const assignmentStatus = guard.PatrolGuards?.status;
+    const guardStatus = guard.PatrolGuards?.status;
 
         return {
           id: run.id,
-          orderId: null,
-          orderLocationName: null,
-          orderLocationAddress: null,
+          patrolId: run.patrolId,
+          vehicleId: run.vehicleId,
+          orderId: run.orderId,
+    orderLocationName: run.order?.locationName || null,
+    orderLocationAddress: run.order?.locationAddress || null,
           date: moment.utc(run.startDateTime).format("YYYY-MM-DD"),
-          type: "patrol",
+          type: run.order.serviceType || "patrol",
           description: run.notes || "Patrol Run",
           startTime: run.startDateTime,
           endTime: run.estimatedCompletion,
           status: run.status,
           shiftTotalHours: null,
           createdAt: run.createdAt,
-          guard: {
-            id: guard.id,
-            name: guard.name,
-            email: guard.email,
-            assignmentStatus,
-            assignedAt: guard.PatrolGuards?.createdAt,
-          },
+          totalSites: run.totalSites,
+          totalSubSites: run.totalSubSites,
+          totalCheckpoints: run.totalCheckpoints,
+          completedSites: run.completedSites,
+          completedSubSites: run.completedSubSites,
+          completedCheckpoints: run.completedCheckpoints,
+
+           guard: {
+      id: guard?.id,
+      name: guard?.name,
+      email: guard?.email,
+      guardStatus: guardStatus || "unknown",
+      assignedAt: guard.PatrolGuards?.createdAt,
+    },
         };
       });
     }
