@@ -611,6 +611,15 @@ export const createPatrolRun = async (req, res) => {
       { transaction: t }
     );
 
+    await PatrolGuards.create(
+  {
+    patrolRunId: patrolRun.id, // foreign key
+    guardId: guardId,           // guard id
+    status: "pending",        // default status
+  },
+  { transaction: t }
+);
+
     await t.commit();
 
     // 4️⃣ Fetch order & guard for response

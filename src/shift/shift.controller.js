@@ -423,6 +423,25 @@ export const getMyShiftDetails = async (req, res, next) => {
      */
     const patrolRun = await PatrolRun.findOne({
       where: { id },
+      attributes: [
+        "id",
+        "patrolId",
+        "orderId",
+        "vehicleId",
+        "notes",
+        "status",
+        "startDateTime",
+        "estimatedCompletion",
+        "runStructure",
+        "totalSites",
+        "totalSubSites",
+        "totalCheckpoints",
+        "completedSites",
+        "completedSubSites",
+        "completedCheckpoints",
+        "createdAt",
+        "updatedAt",
+      ],
       include: [
         {
           model: User,
@@ -432,53 +451,33 @@ export const getMyShiftDetails = async (req, res, next) => {
           attributes: ["id", "name", "email"],
           through: {
             attributes: [
-          "status",
-          "clockInTime",
-          "clockOutTime",
-          "overtimeStartTime",
-          "overtimeEndTime",
-          "overtimeHours",
-          "totalHours",
-          "createdAt",
-        ],
+              "status",
+              "clockInTime",
+              "clockOutTime",
+              "overtimeStartTime",
+              "overtimeEndTime",
+              "overtimeHours",
+              "totalHours",
+              "createdAt",
+            ],
           },
         },
         {
           model: Order,
           as: "order",
-          attributes: ["locationName", "locationAddress", "images", "serviceType"],
+          attributes: [
+            "locationName",
+            "locationAddress",
+            "images",
+            "serviceType",
+          ],
         },
       ],
     });
 
     if (patrolRun) {
-  const guard = patrolRun.guards[0];
-  const pivot = guard.PatrolGuards;
-
-  /**
-   * 🔥 Fetch Sites Using siteIds (JSON)
-   */
-  const sites = await PatrolSite.findAll({
-    where: {
-      id: patrolRun.siteIds,
-    },
-    include: [
-      {
-        model: PatrolSubSite,
-        as: "subSites",
-        include: [
-          {
-            model: PatrolCheckpoint,
-            as: "checkpoints",
-          },
-        ],
-      },
-      {
-        model: PatrolCheckpoint,
-        as: "checkpoints",
-      },
-    ],
-  });
+      const guard = patrolRun.guards[0];
+      const pivot = guard.PatrolGuards;
 
       return res.status(StatusCodes.OK).json({
         success: true,
@@ -498,25 +497,35 @@ export const getMyShiftDetails = async (req, res, next) => {
             completedSites: patrolRun.completedSites,
             completedSubSites: patrolRun.completedSubSites,
             completedCheckpoints: patrolRun.completedCheckpoints,
+            createdAt: patrolRun.createdAt,
           },
+
           order: patrolRun.order,
+
           guard: {
             id: guard.id,
             name: guard.name,
             email: guard.email,
             guardStatus: pivot.status,
+            clockInTime: pivot.clockInTime,
+            clockOutTime: pivot.clockOutTime,
+            overtimeStartTime: pivot.overtimeStartTime,
+            overtimeEndTime: pivot.overtimeEndTime,
+            overtimeHours: pivot.overtimeHours,
+            totalHours: pivot.totalHours,
             assignedAt: pivot.createdAt,
           },
-          sites,
+
+          // 🔥 THIS IS THE IMPORTANT PART
+          sites: patrolRun.runStructure || [],
         },
       });
     }
 
     /**
-     * ❌ NOT FOUND ANYWHERE
+     * ❌ NOT FOUND
      */
     return next(new ErrorHandler("Shift not found", StatusCodes.NOT_FOUND));
-
   } catch (error) {
     console.error("GET SHIFT DETAILS ERROR:", error);
     return res.status(500).json({
