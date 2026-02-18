@@ -99,6 +99,9 @@ const PatrolRun = sequelize.define(
       type: DataTypes.JSON,
       allowNull: false,
     },
+    runStructure: {
+  type: DataTypes.JSON,
+},
   },
   {
     tableName: "PatrolRuns",

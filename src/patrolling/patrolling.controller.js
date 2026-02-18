@@ -483,7 +483,9 @@ export const getCheckpoints = async (req, res, next) => {
 };
 
 
-export const createPatrolRun = async (req, res, next) => {
+export const createPatrolRun = async (req, res) => {
+  const t = await sequelize.transaction();
+
   try {
     const {
       patrolId,
@@ -496,66 +498,7 @@ export const createPatrolRun = async (req, res, next) => {
       siteIds,
     } = req.body;
 
-    // =============================
-    // 🔒 VALIDATION
-    // =============================
-    if (!patrolId || !guardId || !startDateTime || !siteIds?.length) {
-      return next(
-        new ErrorHandler(
-          "Patrol ID, Guard, start time and at least one site required",
-          StatusCodes.BAD_REQUEST
-        )
-      );
-    }
-
-    // =============================
-    // 1️⃣ CHECK GUARD
-    // =============================
-    const guard = await User.findByPk(guardId);
-
-    if (!guard) {
-      return next(
-        new ErrorHandler("Guard not found", StatusCodes.NOT_FOUND)
-      );
-    }
-
-    // =============================
-// 1️⃣ CHECK ORDER
-// =============================
-const order = await Order.findByPk(orderId);
-
-if (!order) {
-  return next(
-    new ErrorHandler("Order not found", StatusCodes.NOT_FOUND)
-  );
-}
-
-
-    // =============================
-    // 2️⃣ PREVENT MULTIPLE ACTIVE/SCHEDULED PATROLS
-    // =============================
-    const existingPatrolShift = await PatrolGuards.findOne({
-  where: {
-    guardId,
-    status: {
-      [Op.in]: ["scheduled", "active"],
-    },
-  },
-});
-
-
-    if (existingPatrolShift) {
-      return next(
-        new ErrorHandler(
-          "Guard already has an active or scheduled patrol run",
-          StatusCodes.BAD_REQUEST
-        )
-      );
-    }
-
-    // =============================
-    // 3️⃣ VALIDATE SITES
-    // =============================
+    // 1️⃣ Fetch full site structure
     const sites = await PatrolSite.findAll({
       where: { id: siteIds },
       include: [
@@ -576,92 +519,134 @@ if (!order) {
       ],
     });
 
-    if (sites.length !== siteIds.length) {
-      return next(
-        new ErrorHandler("One or more sites not found", StatusCodes.BAD_REQUEST)
-      );
+    if (!sites.length) {
+      return res.status(404).json({ success: false, message: "Sites not found" });
     }
 
-    // =============================
-    // 4️⃣ CALCULATE TOTALS
-    // =============================
-    let totalSites = sites.length;
+    // 2️⃣ Build Snapshot Structure
+    let totalSites = 0;
     let totalSubSites = 0;
     let totalCheckpoints = 0;
 
-    sites.forEach((site) => {
-      totalSubSites += site.subSites?.length || 0;
-      totalCheckpoints += site.checkpoints?.length || 0;
+    const runStructure = sites.map((site) => {
+      totalSites++;
 
-      site.subSites?.forEach((sub) => {
-        totalCheckpoints += sub.checkpoints?.length || 0;
+      const subSites = site.subSites.map((sub) => {
+        totalSubSites++;
+
+        const checkpoints = sub.checkpoints.map((cp) => {
+          totalCheckpoints++;
+
+          return {
+            id: cp.id,
+            name: cp.name,
+            latitude: cp.latitude,
+            longitude: cp.longitude,
+            verificationRange: cp.verificationRange,
+            priorityLevel: cp.priorityLevel,
+            description: cp.description,
+            status: "pending",
+            scannedAt: null,
+            scannedBy: null,
+          };
+        });
+
+        return {
+          id: sub.id,
+          name: sub.name,
+          unitPrice: sub.unitPrice,
+          estimatedDuration: sub.estimatedDuration,
+          description: sub.description,
+          status: "pending",
+          checkpoints,
+        };
       });
+
+      const siteCheckpoints = site.checkpoints.map((cp) => {
+        totalCheckpoints++;
+
+        return {
+          id: cp.id,
+          name: cp.name,
+          latitude: cp.latitude,
+          longitude: cp.longitude,
+          verificationRange: cp.verificationRange,
+          priorityLevel: cp.priorityLevel,
+          description: cp.description,
+          status: "pending",
+          scannedAt: null,
+          scannedBy: null,
+        };
+      });
+
+      return {
+        id: site.id,
+        name: site.name,
+        address: site.address,
+        latitude: site.latitude,
+        longitude: site.longitude,
+        description: site.description,
+        status: "pending",
+        subSites,
+        checkpoints: siteCheckpoints,
+      };
     });
 
-    // =============================
-    // 5️⃣ CREATE PATROL RUN
-    // =============================
-    const patrolRun = await PatrolRun.create({
-      patrolId,
-      orderId,
-      guardId,
-      vehicleId,
-      startDateTime,
-      estimatedCompletion,
-      notes,
-      siteIds,
-      status: "pending",
-      approvalStatus: "pending",
-      totalSites,
-      totalSubSites,
-      totalCheckpoints,
-      completedSites: 0,
-      completedSubSites: 0,
-      completedCheckpoints: 0,
-    });
-
-    // =============================
-    // 6️⃣ CREATE SHIFT ENTRY IN PatrolGuards
-    // =============================
-    await PatrolGuards.create({
-  patrolRunId: patrolRun.id,
-  guardId,
-  status: "pending",
-});
-
-
-    // =============================
-    // 7️⃣ NOTIFICATION
-    // =============================
-    await notifyGuardAndAdmin({
-      guardId,
-      patrolRunId: patrolRun.id,
-      status: "patrol_assigned",
-      type: "PATROL_ASSIGNED",
-      guardMessage: `You have been assigned a new patrol run (${patrolId}).`,
-      adminMessage: `Patrol ${patrolId} assigned to ${guard.name}.`,
-    });
-
-    // =============================
-    // ✅ RESPONSE
-    // =============================
-    return res.status(StatusCodes.CREATED).json({
-      success: true,
-      message: "Patrol run created successfully",
-      data: patrolRun,
-    });
-
-  } catch (error) {
-    console.error("CREATE PATROL RUN ERROR:", error);
-    return next(
-      new ErrorHandler(
-        "Internal server error",
-        StatusCodes.INTERNAL_SERVER_ERROR
-      )
+    // 3️⃣ Create Patrol Run
+    const patrolRun = await PatrolRun.create(
+      {
+        patrolId,
+        orderId,
+        guardId,
+        siteIds,
+        vehicleId,
+        startDateTime,
+        estimatedCompletion,
+        notes,
+        runStructure,
+        totalSites,
+        totalSubSites,
+        totalCheckpoints,
+      },
+      { transaction: t }
     );
+
+    await t.commit();
+
+    // 4️⃣ Fetch order & guard for response
+    const order = await Order.findByPk(orderId);
+    const guard = await User.findByPk(guardId);
+
+    return res.status(201).json({
+      success: true,
+      type: "patrol",
+      data: {
+        patrol: {
+          id: patrolRun.id,
+          patrolId: patrolRun.patrolId,
+          vehicleId,
+          description: notes,
+          status: patrolRun.status,
+          startTime: patrolRun.startDateTime,
+          endTime: patrolRun.estimatedCompletion,
+          totalSites,
+          totalSubSites,
+          totalCheckpoints,
+          completedSites: 0,
+          completedSubSites: 0,
+          completedCheckpoints: 0,
+        },
+        order,
+        guard,
+        sites: runStructure,
+      },
+    });
+  } catch (error) {
+    await t.rollback();
+    console.error(error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
-
 
 export const deletePatrolSite = async (req, res, next) => {
   try {
