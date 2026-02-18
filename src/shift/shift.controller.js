@@ -11,6 +11,9 @@ import Incident from "../incident/incident.model.js";
 import Notification from "../notifications/notifications.model.js";
 import PatrolRun from "../patrolling/patrolRun.model.js";
 import PatrolGuards from "../patrolling/PatrolGuards.model.js";
+import PatrolSite from "../patrolling/patrolSite.model.js";
+import PatrolSubSite from "../patrolling/patrolSubSite.model.js";
+import PatrolCheckpoint from "../patrolling/patrolCheckpoint.model.js";
 
 export const assignShift = catchAsyncError(async (req, res, next) => {
   const { orderId } = req.params;
@@ -428,7 +431,16 @@ export const getMyShiftDetails = async (req, res, next) => {
           required: true,
           attributes: ["id", "name", "email"],
           through: {
-            attributes: ["status", "createdAt"],
+            attributes: [
+          "status",
+          "clockInTime",
+          "clockOutTime",
+          "overtimeStartTime",
+          "overtimeEndTime",
+          "overtimeHours",
+          "totalHours",
+          "createdAt",
+        ],
           },
         },
         {
@@ -440,8 +452,33 @@ export const getMyShiftDetails = async (req, res, next) => {
     });
 
     if (patrolRun) {
-      const guard = patrolRun.guards[0];
-      const pivot = guard.PatrolGuards;
+  const guard = patrolRun.guards[0];
+  const pivot = guard.PatrolGuards;
+
+  /**
+   * 🔥 Fetch Sites Using siteIds (JSON)
+   */
+  const sites = await PatrolSite.findAll({
+    where: {
+      id: patrolRun.siteIds,
+    },
+    include: [
+      {
+        model: PatrolSubSite,
+        as: "subSites",
+        include: [
+          {
+            model: PatrolCheckpoint,
+            as: "checkpoints",
+          },
+        ],
+      },
+      {
+        model: PatrolCheckpoint,
+        as: "checkpoints",
+      },
+    ],
+  });
 
       return res.status(StatusCodes.OK).json({
         success: true,
@@ -467,9 +504,10 @@ export const getMyShiftDetails = async (req, res, next) => {
             id: guard.id,
             name: guard.name,
             email: guard.email,
-            assignmentStatus: pivot.status,
+            guardStatus: pivot.status,
             assignedAt: pivot.createdAt,
           },
+          sites,
         },
       });
     }

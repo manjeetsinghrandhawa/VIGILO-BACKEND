@@ -2,6 +2,7 @@ import { DataTypes } from "sequelize";
 import sequelize from "../../config/database.js";
 import User from "../user/user.model.js";
 import Order from "../order/order.model.js";
+import PatrolCheckpoint from "./patrolCheckpoint.model.js";
 
 const PatrolRun = sequelize.define(
   "PatrolRun",
@@ -131,5 +132,17 @@ PatrolRun.belongsTo(Order, {
   foreignKey: "orderId",
   as: "order",
 });
+
+PatrolRun.hasMany(PatrolCheckpoint, {
+  foreignKey: "patrolRunId",
+  as: "runCheckpoints",
+  onDelete: "CASCADE",
+});
+
+PatrolCheckpoint.belongsTo(PatrolRun, {
+  foreignKey: "patrolRunId",
+  as: "patrolRun",
+});
+
 
 export default PatrolRun;
