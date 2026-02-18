@@ -807,26 +807,6 @@ export const getPatrolRunById = async (req, res) => {
           as: "guard",
           attributes: ["id", "name", "email"],
         },
-        // {
-        //   model: Vehicle,
-        //   as: "vehicle",
-        // },
-        {
-          model: PatrolSite,
-          as: "runSites",
-          include: [
-            {
-              model: PatrolSubSite,
-              as: "runSubSites",
-              include: [
-                {
-                  model: PatrolCheckpoint,
-                  as: "runCheckpoints",
-                },
-              ],
-            },
-          ],
-        },
       ],
     });
 
@@ -837,61 +817,39 @@ export const getPatrolRunById = async (req, res) => {
       });
     }
 
+    const runStructure = patrolRun.runStructure || [];
+
     // ============================
-    // 🔥 CALCULATE COUNTS
+    // 🔥 CALCULATE COUNTS FROM JSON
     // ============================
 
     let totalSites = 0;
     let completedSites = 0;
-
     let totalSubSites = 0;
     let completedSubSites = 0;
-
     let totalCheckpoints = 0;
     let completedCheckpoints = 0;
 
-    patrolRun.runSites.forEach((site) => {
+    runStructure.forEach((site) => {
       totalSites++;
-
       if (site.status === "completed") completedSites++;
 
-      site.runSubSites.forEach((sub) => {
+      site.subSites?.forEach((sub) => {
         totalSubSites++;
-
         if (sub.status === "completed") completedSubSites++;
 
-        sub.runCheckpoints.forEach((cp) => {
+        sub.checkpoints?.forEach((cp) => {
           totalCheckpoints++;
-
           if (cp.status === "completed") completedCheckpoints++;
         });
       });
+
+      // If you also have site-level checkpoints
+      site.checkpoints?.forEach((cp) => {
+        totalCheckpoints++;
+        if (cp.status === "completed") completedCheckpoints++;
+      });
     });
-
-    const remainingCheckpoints =
-      totalCheckpoints - completedCheckpoints;
-
-    // ============================
-    // 🔥 FORMAT RESPONSE
-    // ============================
-
-    const formattedSites = patrolRun.runSites.map((site) => ({
-      siteId: site.id,
-      siteName: site.name,
-      status: site.status,
-      subSites: site.runSubSites.map((sub) => ({
-        subSiteId: sub.id,
-        subSiteName: sub.name,
-        status: sub.status,
-        checkpoints: sub.runCheckpoints.map((cp) => ({
-          checkpointId: cp.id,
-          name: cp.name,
-          status: cp.status,
-          scannedAt: cp.scannedAt,
-          qrCode: cp.qrCode,
-        })),
-      })),
-    }));
 
     return res.status(200).json({
       success: true,
@@ -899,17 +857,7 @@ export const getPatrolRunById = async (req, res) => {
         patrolRunId: patrolRun.id,
         patrolId: patrolRun.patrolId,
         status: patrolRun.status,
-        guardAcceptanceStatus: patrolRun.guardAcceptanceStatus,
-
         guard: patrolRun.guard,
-        vehicle: patrolRun.vehicle,
-
-        timing: {
-          startTime: patrolRun.startDateTime,
-          estimatedCompletion: patrolRun.estimatedCompletion,
-          actualStart: patrolRun.actualStart,
-          actualCompletion: patrolRun.actualCompletion,
-        },
 
         summary: {
           totalSites,
@@ -918,10 +866,11 @@ export const getPatrolRunById = async (req, res) => {
           completedSubSites,
           totalCheckpoints,
           completedCheckpoints,
-          remainingCheckpoints,
+          remainingCheckpoints:
+            totalCheckpoints - completedCheckpoints,
         },
 
-        sites: formattedSites,
+        sites: runStructure, // 🔥 DIRECTLY RETURN COPIED DATA
       },
     });
   } catch (error) {
@@ -932,6 +881,7 @@ export const getPatrolRunById = async (req, res) => {
     });
   }
 };
+
 
 
 
