@@ -21,6 +21,10 @@ const PatrolSubSite = sequelize.define(
       allowNull: false,
     },
 
+    status: {
+      type: DataTypes.ENUM("accepted","rejected","pending","upcoming","ongoing", "scheduled", "active", "completed"),
+      defaultValue: "pending",
+    },
     unitPrice: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,

@@ -22,6 +22,10 @@ const PatrolCheckpoint = sequelize.define(
       type: DataTypes.UUID,
       allowNull: true, // or to a sub-site
     },
+    status: {
+      type: DataTypes.ENUM("accepted","rejected","pending","upcoming","ongoing", "scheduled", "active", "completed"),
+      defaultValue: "pending",
+    },
 
     name: {
       type: DataTypes.STRING,

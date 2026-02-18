@@ -34,6 +34,8 @@ const PatrolGuards = sequelize.define(
 
     status: {
       type: DataTypes.ENUM(
+        "accepted",
+        "rejected",
         "pending",
         "upcoming",
         "ongoing",

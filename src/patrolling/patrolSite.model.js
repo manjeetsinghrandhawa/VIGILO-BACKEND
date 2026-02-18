@@ -32,6 +32,10 @@ const PatrolSite = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false,
     },
+    status: {
+      type: DataTypes.ENUM("accepted","rejected","pending","upcoming","ongoing", "scheduled", "active", "completed"),
+      defaultValue: "pending",
+    },
 
     latitude: {
       type: DataTypes.DECIMAL(10, 7),
