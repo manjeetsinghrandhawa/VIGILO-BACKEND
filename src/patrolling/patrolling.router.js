@@ -12,7 +12,8 @@ import { createPatrolSite,
     deleteCheckpoint,
     deletePatrolRun, 
     createPatrolRun,
-    getPatrolRunById } from "./patrolling.controller.js";
+    getPatrolRunById,
+getPatrolSiteDetails } from "./patrolling.controller.js";
 
 const route = express.Router();
 
@@ -29,6 +30,7 @@ route.delete("/deletePatrolSubSite/:subSiteId", auth, isAdmin, deletePatrolSubSi
 route.delete("/deleteCheckpoint/:checkpointId", auth, isAdmin, deleteCheckpoint);
 route.delete("/deletePatrolRun/:patrolId", auth, isAdmin, deletePatrolRun);
 route.get("/getPatrolRunById/:patrolId", auth, isAdmin, getPatrolRunById);
+route.get("/getPatrolSiteDetails/:patrolRunId/:siteId", auth, isGaurd, getPatrolSiteDetails);
 
 
     

@@ -891,6 +891,106 @@ export const getPatrolRunById = async (req, res) => {
   }
 };
 
+export const getPatrolSiteDetails = async (req, res, next) => {
+  try {
+    const { patrolRunId, siteId } = req.params;
+    const guardId = req.user?.id;
+
+    if (!guardId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
+
+    // 1️⃣ Fetch patrol run
+    const patrolRun = await PatrolRun.findByPk(patrolRunId);
+
+    if (!patrolRun) {
+      return next(
+        new ErrorHandler("Patrol run not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    // 2️⃣ Check guard assignment
+    const assignedGuard = await PatrolGuards.findOne({
+      where: { patrolRunId, guardId },
+    });
+
+    if (!assignedGuard) {
+      return next(
+        new ErrorHandler(
+          "You are not assigned to this patrol run",
+          StatusCodes.FORBIDDEN
+        )
+      );
+    }
+
+    // 3️⃣ Extract site from JSON snapshot
+    const site = patrolRun.runStructure.find(
+      (s) => s.id === siteId
+    );
+
+    if (!site) {
+      return next(
+        new ErrorHandler("Site not found in this patrol run", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    // 4️⃣ Calculate summary (like Figma cards)
+    let totalSubSites = site.subSites.length;
+    let totalCheckpoints = 0;
+    let completedCheckpoints = 0;
+
+    // subsite checkpoints
+    site.subSites.forEach((sub) => {
+      totalCheckpoints += sub.checkpoints.length;
+
+      sub.checkpoints.forEach((cp) => {
+        if (cp.status === "completed") {
+          completedCheckpoints++;
+        }
+      });
+    });
+
+    // site-level checkpoints
+    totalCheckpoints += site.checkpoints.length;
+
+    site.checkpoints.forEach((cp) => {
+      if (cp.status === "completed") {
+        completedCheckpoints++;
+      }
+    });
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        site: {
+          id: site.id,
+          name: site.name,
+          address: site.address,
+          latitude: site.latitude,
+          longitude: site.longitude,
+          description: site.description,
+          status: site.status,
+        },
+
+        summary: {
+          totalSubSites,
+          totalCheckpoints,
+          completedCheckpoints,
+          pendingCheckpoints:
+            totalCheckpoints - completedCheckpoints,
+        },
+
+        subSites: site.subSites,
+        checkpoints: site.checkpoints, // site-level checkpoints
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 
 
