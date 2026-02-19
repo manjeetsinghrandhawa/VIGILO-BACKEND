@@ -27,20 +27,27 @@ export const registerUser = catchAsyncError(async (req, res, next) => {
     );
   }
 
-  // 🔎 Always check userModel (source of truth)
-  let user = await userModel.findOne({
-    where: { email, role: "user" }
-  });
+  let user = await userModel.findOne({ where: { email } });
 
-  // ✅ CASE 1: Already verified user
-  if (user && user.isVerified) {
-    return next(
-      new ErrorHandler(
-        "User already registered. Please login.",
-        StatusCodes.CONFLICT
-      )
-    );
-  }
+// If user exists but with different role
+if (user && user.role !== "user") {
+  return next(
+    new ErrorHandler(
+      "This email is already registered with another role.",
+      StatusCodes.CONFLICT
+    )
+  );
+}
+
+// If verified guard already exists
+if (user && user.isVerified) {
+  return next(
+    new ErrorHandler(
+      "User already registered. Please login.",
+      StatusCodes.CONFLICT
+    )
+  );
+}
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -104,18 +111,28 @@ export const registerGaurd = catchAsyncError(async (req, res, next) => {
     );
   }
 
-  // 🔎 Check if user already exists
-  let user = await userModel.findOne({ where: { email, role: "guard" } });
+  let user = await userModel.findOne({ where: { email } });
 
-  // ✅ CASE 1: User exists and VERIFIED
-  if (user && user.isVerified) {
-    return next(
-      new ErrorHandler(
-        "User already registered. Please login.",
-        StatusCodes.CONFLICT
-      )
-    );
-  }
+// If user exists but with different role
+if (user && user.role !== "guard") {
+  return next(
+    new ErrorHandler(
+      "This email is already registered with another role.",
+      StatusCodes.CONFLICT
+    )
+  );
+}
+
+// If verified guard already exists
+if (user && user.isVerified) {
+  return next(
+    new ErrorHandler(
+      "User already registered. Please login.",
+      StatusCodes.CONFLICT
+    )
+  );
+}
+
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
