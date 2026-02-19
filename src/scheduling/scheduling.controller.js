@@ -782,6 +782,19 @@ export const getMyAllShifts = async (req, res, next) => {
           },
           required: true,
         },
+        {
+      model: Incident,
+      as: "incidents",
+      required: false, // 🔑 VERY IMPORTANT (don’t filter shifts)
+      attributes: [
+        "id",
+        "name",
+        "location",
+        "description",
+        "images",
+        "createdAt",
+      ],
+    },
       ],
       order: [["startTime", "DESC"]],
       limit,
@@ -819,6 +832,9 @@ export const getMyAllShifts = async (req, res, next) => {
           assignmentStatus,
           assignedAt: guard.StaticGuards?.createdAt,
         },
+        incidents: shift.incidents || [],
+        incidentsCount: shift.incidents?.length || 0,
+
       });
     }
     // **
@@ -847,6 +863,7 @@ export const getMyAllShifts = async (req, res, next) => {
         },
         required: true,
       },
+      
         {
         model: Order,
         as: "order",
@@ -1866,6 +1883,19 @@ let shift = await Static.findOne({
       as: "order",
       attributes: ["locationName", "locationAddress"],
     },
+     {
+      model: Incident,
+      as: "incidents",
+      required: false, // 🔑 VERY IMPORTANT (don’t filter shifts)
+      attributes: [
+        "id",
+        "name",
+        "location",
+        "description",
+        "images",
+        "createdAt",
+      ],
+    },
   ],
   order: [["startTime", "ASC"]],
 });
@@ -1909,6 +1939,19 @@ if (!shift) {
         as: "order",
         attributes: ["locationName", "locationAddress"],
       },
+       {
+      model: Incident,
+      as: "incidents",
+      required: false, // 🔑 VERY IMPORTANT (don’t filter shifts)
+      attributes: [
+        "id",
+        "name",
+        "location",
+        "description",
+        "images",
+        "createdAt",
+      ],
+    },
     ],
     order: [["endTime", "DESC"]],
   });
@@ -1945,6 +1988,19 @@ if (!shift) {
         as: "order",
         attributes: ["locationName", "locationAddress"],
       },
+       {
+      model: Incident,
+      as: "incidents",
+      required: false, // 🔑 VERY IMPORTANT (don’t filter shifts)
+      attributes: [
+        "id",
+        "name",
+        "location",
+        "description",
+        "images",
+        "createdAt",
+      ],
+    },
     ],
     order: [["startTime", "ASC"]],
   });
@@ -1983,6 +2039,19 @@ if (!shift) {
         as: "order",
         attributes: ["locationName", "locationAddress"],
       },
+       {
+      model: Incident,
+      as: "incidents",
+      required: false, // 🔑 VERY IMPORTANT (don’t filter shifts)
+      attributes: [
+        "id",
+        "name",
+        "location",
+        "description",
+        "images",
+        "createdAt",
+      ],
+    },
     ],
     order: [["startTime", "ASC"]], // ✅ nearest upcoming
   });
@@ -2036,6 +2105,9 @@ const overtimeHours = pivot?.overtimeHours || null;
           locationName: shift.order?.locationName || null,
           locationAddress: shift.order?.locationAddress || null,
         },
+        incidents: shift.incidents || [],
+        incidentsCount: shift.incidents?.length || 0,
+        
 
         timing: {
           startTime: shift.startTime,
@@ -2561,8 +2633,7 @@ const patrolResponse = patrolRuns.map((run) => {
       assignedAt: guard?.PatrolGuards?.createdAt,
     },
 
-    incidents: [], // Patrol has no static incidents
-    incidentsCount: 0,
+    
   };
 });
 
