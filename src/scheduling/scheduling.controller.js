@@ -2013,7 +2013,7 @@ if (!shift) {
   shift = await Static.findOne({
     where: {
       status: "upcoming",
-      startTime: {
+      endTime: {
         [Op.gte]: now.toDate(), // ✅ FIX
       },
     },

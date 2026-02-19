@@ -27,69 +27,66 @@ export const registerUser = catchAsyncError(async (req, res, next) => {
     );
   }
 
-  const checkUser = await userVerifyModel.findOne({
-    where: { email, type: "register" }
+  // 🔎 Always check userModel (source of truth)
+  let user = await userModel.findOne({
+    where: { email, role: "user" }
   });
 
-  // 🔁 If user exists but not verified
-  if (checkUser) {
-    const user = await userModel.findOne({ where: { email } });
-
-    if (!user.isVerified) {
-      const hashedPassword = await bcrypt.hash(password, 10);
-      user.name = name;
-      user.password = hashedPassword;
-      user.address = address;
-      if (mobile) user.mobile = mobile;
-      if (avatar) user.avatar = avatar;
-      await user.save();
-
-      const expireIn = Date.now() + 5 * 60 * 1000;
-
-      checkUser.otp = 1111;
-      checkUser.expireIn = expireIn;
-      await checkUser.save();
-
-      return res.status(StatusCodes.OK).json({
-        success: true,
-        message: `User details updated and new OTP sent to ${email}`,
-        otp: 1111 // ✅ added
-      });
-    } else {
-      return next(
-        new ErrorHandler(
-          "User is already registered, please login!",
-          StatusCodes.NOT_ACCEPTABLE
-        )
-      );
-    }
+  // ✅ CASE 1: Already verified user
+  if (user && user.isVerified) {
+    return next(
+      new ErrorHandler(
+        "User already registered. Please login.",
+        StatusCodes.CONFLICT
+      )
+    );
   }
 
-  // 🆕 New user registration
   const hashedPassword = await bcrypt.hash(password, 10);
-  const user = await userModel.create({
-    name,
-    email,
-    password: hashedPassword,
-    role: "user",
-    mobile,
-    avatar,
-    address
+
+  // ✅ CASE 2: User exists but not verified → Update details
+  if (user && !user.isVerified) {
+    user.name = name;
+    user.password = hashedPassword;
+    user.address = address;
+    user.mobile = mobile || null;
+    user.avatar = avatar || null;
+
+    await user.save();
+  }
+
+  // ✅ CASE 3: New user
+  if (!user) {
+    user = await userModel.create({
+      name,
+      email,
+      password: hashedPassword,
+      role: "user",
+      mobile,
+      avatar,
+      address,
+      isVerified: false,
+    });
+  }
+
+  // 🔁 Always delete old OTP (important)
+  await userVerifyModel.destroy({
+    where: { email, type: "register" }
   });
 
   const expireIn = Date.now() + 5 * 60 * 1000;
 
   await userVerifyModel.create({
     email,
-    otp: 1111,
+    otp: 1111, // ⚠ Replace with random in production
     expireIn,
-    type: "register"
+    type: "register",
   });
 
-  res.status(StatusCodes.OK).json({
+  return res.status(StatusCodes.OK).json({
     success: true,
     message: `OTP sent successfully to ${email}`,
-    otp: 1111 // ✅ added
+    otp: 1111,
   });
 });
 
@@ -107,56 +104,51 @@ export const registerGaurd = catchAsyncError(async (req, res, next) => {
     );
   }
 
-  const checkUser = await userVerifyModel.findOne({
-    where: { email, type: "register" }
-  });
+  // 🔎 Check if user already exists
+  let user = await userModel.findOne({ where: { email, role: "guard" } });
 
-  // 🔁 Existing but unverified user
-  if (checkUser) {
-    const user = await userModel.findOne({ where: { email } });
-
-    if (!user.isVerified) {
-      const hashedPassword = await bcrypt.hash(password, 10);
-      user.name = name;
-      user.password = hashedPassword;
-      user.address = address;
-      if (mobile) user.mobile = mobile;
-      if (avatar) user.avatar = avatar;
-      if (countryCode) user.countryCode = countryCode;
-      await user.save();
-
-      const expireIn = Date.now() + 5 * 60 * 1000;
-
-      checkUser.otp = 1111;
-      checkUser.expireIn = expireIn;
-      await checkUser.save();
-
-      return res.status(StatusCodes.OK).json({
-        success: true,
-        message: `User details updated and new OTP sent to ${email}`,
-        otp: 1111 // ✅ added
-      });
-    } else {
-      return next(
-        new ErrorHandler(
-          "User is already registered, please login!",
-          StatusCodes.NOT_ACCEPTABLE
-        )
-      );
-    }
+  // ✅ CASE 1: User exists and VERIFIED
+  if (user && user.isVerified) {
+    return next(
+      new ErrorHandler(
+        "User already registered. Please login.",
+        StatusCodes.CONFLICT
+      )
+    );
   }
 
-  // 🆕 New guard registration
   const hashedPassword = await bcrypt.hash(password, 10);
-  const user = await userModel.create({
-    name,
-    email,
-    password: hashedPassword,
-    role: "guard",
-    mobile,
-    countryCode,
-    avatar,
-    address
+
+  // ✅ CASE 2: User exists but NOT verified → Update details
+  if (user && !user.isVerified) {
+    user.name = name;
+    user.password = hashedPassword;
+    user.address = address;
+    user.mobile = mobile || null;
+    user.avatar = avatar || null;
+    user.countryCode = countryCode || null;
+
+    await user.save();
+  }
+
+  // ✅ CASE 3: New User
+  if (!user) {
+    user = await userModel.create({
+      name,
+      email,
+      password: hashedPassword,
+      role: "guard",
+      mobile,
+      countryCode,
+      avatar,
+      address,
+      isVerified: false,
+    });
+  }
+
+  // 🔁 Always recreate OTP entry (delete old one first)
+  await userVerifyModel.destroy({
+    where: { email, type: "register" }
   });
 
   const expireIn = Date.now() + 5 * 60 * 1000;
@@ -165,13 +157,13 @@ export const registerGaurd = catchAsyncError(async (req, res, next) => {
     email,
     otp: 1111,
     expireIn,
-    type: "register"
+    type: "register",
   });
 
-  res.status(StatusCodes.OK).json({
+  return res.status(StatusCodes.OK).json({
     success: true,
     message: `OTP sent successfully to ${email}`,
-    otp: 1111 // ✅ added
+    otp: 1111,
   });
 });
 
@@ -273,7 +265,14 @@ export const verifyRegisterEmail = catchAsyncError(async (req, res, next) => {
   }
 
   const verifiedUser = await userModel.findOne({ where: { email } });
+  if (!verifiedUser) {
+  return next(
+    new ErrorHandler("User not found", StatusCodes.NOT_FOUND)
+  );
+}
   await verifiedUser.update({ isVerified: true });
+  await checkUser.destroy(); // 🔥 cleanup OTP record
+
 
   const token = jwt.sign(
     { id: verifiedUser.id, email: verifiedUser.email },
