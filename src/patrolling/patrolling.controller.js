@@ -991,6 +991,107 @@ export const getPatrolSiteDetails = async (req, res, next) => {
   }
 };
 
+export const getPatrolSubSiteDetails = async (req, res, next) => {
+  try {
+    const { patrolRunId, subSiteId } = req.params;
+    const guardId = req.user?.id;
+
+    if (!guardId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
+
+    // 1️⃣ Fetch patrol run
+    const patrolRun = await PatrolRun.findByPk(patrolRunId);
+
+    if (!patrolRun) {
+      return next(
+        new ErrorHandler("Patrol run not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    // 2️⃣ Verify guard is assigned
+    const assignedGuard = await PatrolGuards.findOne({
+      where: { patrolRunId, guardId },
+    });
+
+    if (!assignedGuard) {
+      return next(
+        new ErrorHandler(
+          "You are not assigned to this patrol run",
+          StatusCodes.FORBIDDEN
+        )
+      );
+    }
+
+    // 3️⃣ Extract subsite from JSON snapshot
+    let foundSubSite = null;
+
+    for (const site of patrolRun.runStructure) {
+      const subSite = site.subSites?.find(
+        (sub) => sub.id === subSiteId
+      );
+
+      if (subSite) {
+        foundSubSite = {
+          ...subSite,
+          parentSite: {
+            id: site.id,
+            name: site.name,
+            status: site.status,
+          },
+        };
+        break;
+      }
+    }
+
+    if (!foundSubSite) {
+      return next(
+        new ErrorHandler(
+          "SubSite not found in this patrol run",
+          StatusCodes.NOT_FOUND
+        )
+      );
+    }
+
+    // 4️⃣ Calculate checkpoint summary
+    const totalCheckpoints = foundSubSite.checkpoints.length;
+
+    const completedCheckpoints = foundSubSite.checkpoints.filter(
+      (cp) => cp.status === "completed"
+    ).length;
+
+    const pendingCheckpoints =
+      totalCheckpoints - completedCheckpoints;
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        subSite: {
+          id: foundSubSite.id,
+          name: foundSubSite.name,
+          description: foundSubSite.description,
+          latitude: foundSubSite.latitude,
+          longitude: foundSubSite.longitude,
+          status: foundSubSite.status,
+        },
+
+        parentSite: foundSubSite.parentSite,
+
+        summary: {
+          totalCheckpoints,
+          completedCheckpoints,
+          pendingCheckpoints,
+        },
+
+        checkpoints: foundSubSite.checkpoints,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 
 
