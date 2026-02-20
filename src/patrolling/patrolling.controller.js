@@ -1388,13 +1388,15 @@ export const getPatrolRunByIdForAdmin = async (req, res, next) => {
 
 export const scanCheckpoint = async (req, res, next) => {
   try {
+    const userId = req.user.id;
+
     const {
       patrolRunId,
       checkpointId,
       coordinates,
-      coordinateRange, // "In-range" or "Out-of-range"
+      coordinateRange,
       message,
-      images, // array of image URLs
+      images,
     } = req.body;
 
     if (!patrolRunId || !checkpointId) {
@@ -1411,13 +1413,54 @@ export const scanCheckpoint = async (req, res, next) => {
       );
     }
 
+    // 🔐 Ensure guard is assigned
+    const patrolGuard = await PatrolGuards.findOne({
+      where: { patrolRunId: patrolRun.id, guardId: userId },
+    });
+
+    if (!patrolGuard) {
+      return next(
+        new ErrorHandler(
+          "You are not assigned to this patrol run",
+          StatusCodes.FORBIDDEN
+        )
+      );
+    }
+
     let runStructure = patrolRun.runStructure || [];
+
+    // 🔥 Count BEFORE scan
+    let previousCompleted = patrolRun.completedCheckpoints || 0;
+
     let checkpointFound = false;
 
-    // 🔥 Traverse runStructure (sites → subsites → checkpoints)
+    // 🔥 STEP 1: If first scan → convert structure to ONGOING
+    if (previousCompleted === 0) {
+      runStructure = runStructure.map((site) => ({
+        ...site,
+        status: "ongoing",
+        subSites: site.subSites?.map((sub) => ({
+          ...sub,
+          status: "ongoing",
+          checkpoints: sub.checkpoints?.map((cp) => ({
+            ...cp,
+            status:
+              cp.status === "upcoming" ? "ongoing" : cp.status,
+          })),
+        })) || [],
+        checkpoints: site.checkpoints?.map((cp) => ({
+          ...cp,
+          status:
+            cp.status === "upcoming" ? "ongoing" : cp.status,
+        })) || [],
+      }));
 
+      patrolRun.status = "ongoing";
+    }
+
+    // 🔥 STEP 2: Update scanned checkpoint
     runStructure = runStructure.map((site) => {
-      // Direct site checkpoints
+      // Site checkpoints
       if (site.checkpoints?.length) {
         site.checkpoints = site.checkpoints.map((cp) => {
           if (cp.id === checkpointId) {
@@ -1426,7 +1469,9 @@ export const scanCheckpoint = async (req, res, next) => {
             return {
               ...cp,
               status:
-                coordinateRange === "In-range" ? "completed" : "missed",
+                coordinateRange === "In-range"
+                  ? "completed"
+                  : "missed",
               scannedAt: new Date(),
               coordinates,
               coordinateRange,
@@ -1471,12 +1516,14 @@ export const scanCheckpoint = async (req, res, next) => {
 
     if (!checkpointFound) {
       return next(
-        new ErrorHandler("Checkpoint not found in this patrol run", 404)
+        new ErrorHandler(
+          "Checkpoint not found in this patrol run",
+          404
+        )
       );
     }
 
-    // 🔥 RECALCULATE COMPLETED CHECKPOINTS (safe way)
-
+    // 🔥 STEP 3: Recalculate everything from runStructure
     let totalCheckpoints = 0;
     let completedCheckpoints = 0;
 
@@ -1499,7 +1546,33 @@ export const scanCheckpoint = async (req, res, next) => {
         ? 0
         : Math.round((completedCheckpoints / totalCheckpoints) * 100);
 
-    // 🔥 Save updates
+    // 🔥 STEP 4: If ALL checkpoints completed → close entire patrol
+if (completedCheckpoints === totalCheckpoints && totalCheckpoints > 0) {
+
+  // Convert full structure to completed
+  runStructure = runStructure.map((site) => ({
+    ...site,
+    status: "completed",
+    subSites: site.subSites?.map((sub) => ({
+      ...sub,
+      status: "completed",
+      checkpoints: sub.checkpoints?.map((cp) => ({
+        ...cp,
+        status:
+          cp.status === "missed" ? "missed" : "completed",
+      })),
+    })) || [],
+    checkpoints: site.checkpoints?.map((cp) => ({
+      ...cp,
+      status:
+        cp.status === "missed" ? "missed" : "completed",
+    })) || [],
+  }));
+
+  patrolRun.status = "completed";
+}
+
+    // 🔥 Save snapshot
     patrolRun.runStructure = runStructure;
     patrolRun.completedCheckpoints = completedCheckpoints;
     patrolRun.completionPercentage = completionPercentage;
@@ -1512,7 +1585,8 @@ export const scanCheckpoint = async (req, res, next) => {
       data: {
         patrolRunId,
         checkpointId,
-        status:
+        patrolStatus: patrolRun.status,
+        checkpointStatus:
           coordinateRange === "In-range"
             ? "completed"
             : "missed",
