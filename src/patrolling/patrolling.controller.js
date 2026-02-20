@@ -1385,3 +1385,149 @@ export const getPatrolRunByIdForAdmin = async (req, res, next) => {
     );
   }
 };
+
+export const scanCheckpoint = async (req, res, next) => {
+  try {
+    const {
+      patrolRunId,
+      checkpointId,
+      coordinates,
+      coordinateRange, // "In-range" or "Out-of-range"
+      message,
+      images, // array of image URLs
+    } = req.body;
+
+    if (!patrolRunId || !checkpointId) {
+      return next(
+        new ErrorHandler("patrolRunId and checkpointId are required", 400)
+      );
+    }
+
+    const patrolRun = await PatrolRun.findByPk(patrolRunId);
+
+    if (!patrolRun) {
+      return next(
+        new ErrorHandler("Patrol run not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    let runStructure = patrolRun.runStructure || [];
+    let checkpointFound = false;
+
+    // 🔥 Traverse runStructure (sites → subsites → checkpoints)
+
+    runStructure = runStructure.map((site) => {
+      // Direct site checkpoints
+      if (site.checkpoints?.length) {
+        site.checkpoints = site.checkpoints.map((cp) => {
+          if (cp.id === checkpointId) {
+            checkpointFound = true;
+
+            return {
+              ...cp,
+              status:
+                coordinateRange === "In-range" ? "completed" : "missed",
+              scannedAt: new Date(),
+              coordinates,
+              coordinateRange,
+              message: message || null,
+              images: images || [],
+            };
+          }
+          return cp;
+        });
+      }
+
+      // Subsite checkpoints
+      if (site.subSites?.length) {
+        site.subSites = site.subSites.map((sub) => {
+          if (sub.checkpoints?.length) {
+            sub.checkpoints = sub.checkpoints.map((cp) => {
+              if (cp.id === checkpointId) {
+                checkpointFound = true;
+
+                return {
+                  ...cp,
+                  status:
+                    coordinateRange === "In-range"
+                      ? "completed"
+                      : "missed",
+                  scannedAt: new Date(),
+                  coordinates,
+                  coordinateRange,
+                  message: message || null,
+                  images: images || [],
+                };
+              }
+              return cp;
+            });
+          }
+          return sub;
+        });
+      }
+
+      return site;
+    });
+
+    if (!checkpointFound) {
+      return next(
+        new ErrorHandler("Checkpoint not found in this patrol run", 404)
+      );
+    }
+
+    // 🔥 RECALCULATE COMPLETED CHECKPOINTS (safe way)
+
+    let totalCheckpoints = 0;
+    let completedCheckpoints = 0;
+
+    runStructure.forEach((site) => {
+      site.checkpoints?.forEach((cp) => {
+        totalCheckpoints++;
+        if (cp.status === "completed") completedCheckpoints++;
+      });
+
+      site.subSites?.forEach((sub) => {
+        sub.checkpoints?.forEach((cp) => {
+          totalCheckpoints++;
+          if (cp.status === "completed") completedCheckpoints++;
+        });
+      });
+    });
+
+    const completionPercentage =
+      totalCheckpoints === 0
+        ? 0
+        : Math.round((completedCheckpoints / totalCheckpoints) * 100);
+
+    // 🔥 Save updates
+    patrolRun.runStructure = runStructure;
+    patrolRun.completedCheckpoints = completedCheckpoints;
+    patrolRun.completionPercentage = completionPercentage;
+
+    await patrolRun.save();
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Checkpoint scanned successfully",
+      data: {
+        patrolRunId,
+        checkpointId,
+        status:
+          coordinateRange === "In-range"
+            ? "completed"
+            : "missed",
+        completedCheckpoints,
+        totalCheckpoints,
+        completionPercentage,
+      },
+    });
+  } catch (error) {
+    console.error("SCAN CHECKPOINT ERROR:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to scan checkpoint",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
