@@ -1531,3 +1531,102 @@ export const scanCheckpoint = async (req, res, next) => {
     );
   }
 };
+
+export const viewCheckpointById = async (req, res, next) => {
+  try {
+    const { patrolRunId, checkpointId } = req.params;
+
+    if (!patrolRunId || !checkpointId) {
+      return next(
+        new ErrorHandler("patrolRunId and checkpointId are required", 400)
+      );
+    }
+
+    const patrolRun = await PatrolRun.findByPk(patrolRunId);
+
+    if (!patrolRun) {
+      return next(
+        new ErrorHandler("Patrol run not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    const runStructure = patrolRun.runStructure || [];
+    let foundCheckpoint = null;
+    let parentSite = null;
+    let parentSubSite = null;
+
+    // 🔥 Traverse runStructure
+
+    for (const site of runStructure) {
+      // Direct site checkpoints
+      if (site.checkpoints?.length) {
+        for (const cp of site.checkpoints) {
+          if (cp.id === checkpointId) {
+            foundCheckpoint = cp;
+            parentSite = site;
+            break;
+          }
+        }
+      }
+
+      // Subsite checkpoints
+      if (!foundCheckpoint && site.subSites?.length) {
+        for (const sub of site.subSites) {
+          if (sub.checkpoints?.length) {
+            for (const cp of sub.checkpoints) {
+              if (cp.id === checkpointId) {
+                foundCheckpoint = cp;
+                parentSite = site;
+                parentSubSite = sub;
+                break;
+              }
+            }
+          }
+          if (foundCheckpoint) break;
+        }
+      }
+
+      if (foundCheckpoint) break;
+    }
+
+    if (!foundCheckpoint) {
+      return next(
+        new ErrorHandler(
+          "Checkpoint not found in this patrol run",
+          StatusCodes.NOT_FOUND
+        )
+      );
+    }
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        patrolRunId,
+        checkpoint: {
+          id: foundCheckpoint.id,
+          name: foundCheckpoint.name,
+          status: foundCheckpoint.status || "pending",
+          scannedAt: foundCheckpoint.scannedAt || null,
+          coordinates: foundCheckpoint.coordinates || null,
+          coordinateRange: foundCheckpoint.coordinateRange || null,
+          message: foundCheckpoint.message || null,
+          images: foundCheckpoint.images || [],
+        },
+        location: {
+          siteId: parentSite?.id || null,
+          siteName: parentSite?.name || null,
+          subSiteId: parentSubSite?.id || null,
+          subSiteName: parentSubSite?.name || null,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("VIEW CHECKPOINT ERROR:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to fetch checkpoint details",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
