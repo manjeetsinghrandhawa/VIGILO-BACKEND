@@ -1203,3 +1203,185 @@ export const getAllPatrolRunsForAdmin = async (req, res, next) => {
   }
 };
 
+export const getPatrolRunByIdForAdmin = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const patrolRun = await PatrolRun.findOne({
+      where: { id },
+      attributes: [
+        "id",
+        "patrolId",
+        "vehicleId",
+        "notes",
+        "status",
+        "startDateTime",
+        "estimatedCompletion",
+        "runStructure",
+        "createdAt",
+        "updatedAt",
+      ],
+      include: [
+        {
+          model: Order,
+          as: "order",
+          attributes: [
+            "id",
+            "locationName",
+            "locationAddress",
+            "images",
+            "serviceType",
+            "startDate",
+            "startTime",
+            "status",
+          ],
+          include: [
+            {
+              model: User,
+              as: "user", // client
+              attributes: ["id", "name", "email", "mobile"],
+            },
+          ],
+        },
+        {
+          model: User,
+          as: "guards",
+          attributes: ["id", "name", "email"],
+          through: {
+            attributes: [
+              "status",
+              "clockInTime",
+              "clockOutTime",
+              "overtimeStartTime",
+              "overtimeEndTime",
+              "overtimeHours",
+              "totalHours",
+              "createdAt",
+            ],
+          },
+        },
+      ],
+    });
+
+    if (!patrolRun) {
+      return next(
+        new ErrorHandler("Patrol run not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    const runStructure = patrolRun.runStructure || [];
+
+    // 🔥 CALCULATE COUNTS FROM runStructure (SOURCE OF TRUTH)
+
+    let totalSites = 0;
+    let completedSites = 0;
+
+    let totalSubSites = 0;
+    let completedSubSites = 0;
+
+    let totalCheckpoints = 0;
+    let completedCheckpoints = 0;
+    let missedCheckpoints = 0;
+
+    runStructure.forEach((site) => {
+      totalSites++;
+
+      if (site.status === "completed") completedSites++;
+
+      // SubSites
+      site.subSites?.forEach((sub) => {
+        totalSubSites++;
+
+        if (sub.status === "completed") completedSubSites++;
+
+        sub.checkpoints?.forEach((cp) => {
+          totalCheckpoints++;
+
+          if (cp.status === "completed" || cp.status === "scanned")
+            completedCheckpoints++;
+
+          if (cp.status === "missed") missedCheckpoints++;
+        });
+      });
+
+      // Direct site checkpoints
+      site.checkpoints?.forEach((cp) => {
+        totalCheckpoints++;
+
+        if (cp.status === "completed" || cp.status === "scanned")
+          completedCheckpoints++;
+
+        if (cp.status === "missed") missedCheckpoints++;
+      });
+    });
+
+    const completionPercentage =
+      totalCheckpoints === 0
+        ? 0
+        : Math.round((completedCheckpoints / totalCheckpoints) * 100);
+
+    // 🔥 FORMAT GUARDS
+    const guards = patrolRun.guards.map((guard) => ({
+      id: guard.id,
+      name: guard.name,
+      email: guard.email,
+      guardStatus: guard.PatrolGuards.status,
+      clockInTime: guard.PatrolGuards.clockInTime,
+      clockOutTime: guard.PatrolGuards.clockOutTime,
+      overtimeStartTime: guard.PatrolGuards.overtimeStartTime,
+      overtimeEndTime: guard.PatrolGuards.overtimeEndTime,
+      overtimeHours: guard.PatrolGuards.overtimeHours,
+      totalHours: guard.PatrolGuards.totalHours,
+      assignedAt: guard.PatrolGuards.createdAt,
+    }));
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      type: "patrol",
+      data: {
+        patrol: {
+          id: patrolRun.id,
+          patrolId: patrolRun.patrolId,
+          vehicleId: patrolRun.vehicleId,
+          description: patrolRun.notes,
+          status: patrolRun.status,
+          startTime: patrolRun.startDateTime,
+          estimatedCompletion: patrolRun.estimatedCompletion,
+          completionPercentage,
+
+          totalSites,
+          completedSites,
+
+          totalSubSites,
+          completedSubSites,
+
+          totalCheckpoints,
+          completedCheckpoints,
+          missedCheckpoints,
+
+          hasDeviation: missedCheckpoints > 0,
+
+          createdAt: patrolRun.createdAt,
+          updatedAt: patrolRun.updatedAt,
+        },
+
+        order: patrolRun.order,
+
+        client: patrolRun.order?.user || null,
+
+        guards,
+
+        // 🔥 THIS IS THE EXECUTED STRUCTURE (UPDATED BY GUARD)
+        sites: runStructure,
+      },
+    });
+  } catch (error) {
+    console.error("GET PATROL RUN DETAILS ERROR:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to fetch patrol run details",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};

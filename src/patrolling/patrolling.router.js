@@ -15,7 +15,8 @@ import { createPatrolSite,
     getPatrolRunById,
 getPatrolSiteDetails,
 getPatrolSubSiteDetails,
-getAllPatrolRunsForAdmin
+getAllPatrolRunsForAdmin,
+getPatrolRunByIdForAdmin
  } from "./patrolling.controller.js";
 
 const route = express.Router();
@@ -36,5 +37,6 @@ route.get("/getPatrolRunById/:patrolId", auth, isAdmin, getPatrolRunById);
 route.get("/getPatrolSiteDetails/:patrolRunId/:siteId", auth, isGaurd, getPatrolSiteDetails);
 route.get("/getPatrolSubSiteDetails/:patrolRunId/:subSiteId",auth, isGaurd, getPatrolSubSiteDetails);
 route.get("/getAllPatrolRunsForAdmin", auth, isAdmin, getAllPatrolRunsForAdmin);
+route.get("/getPatrolRunByIdForAdmin/:id", auth, isAdmin, getPatrolRunByIdForAdmin);
 
 export default route;
