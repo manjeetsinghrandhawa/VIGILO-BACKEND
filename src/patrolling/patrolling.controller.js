@@ -1094,5 +1094,112 @@ export const getPatrolSubSiteDetails = async (req, res, next) => {
 };
 
 
+export const getAllPatrolRunsForAdmin = async (req, res, next) => {
+  try {
+    const patrolRuns = await PatrolRun.findAll({
+      include: [
+        {
+          model: Order,
+          as: "order",
+          attributes: [
+            "id",
+            "locationName",
+            "startTime",
+            "startDate",
+            "status",
+          ],
+          include: [
+            {
+              model: User,
+              as: "user", // Client
+              attributes: ["id", "name", "email"],
+            },
+          ],
+        },
+        {
+          model: User,
+          as: "guards", // via belongsToMany
+          attributes: ["id", "name"],
+          through: {
+            attributes: [
+              "status",
+              "clockInTime",
+              "clockOutTime",
+              "totalHours",
+            ],
+          },
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
 
+    const formattedRuns = patrolRuns.map((run) => {
+      const total = run.totalCheckpoints || 0;
+      const completed = run.completedCheckpoints || 0;
+
+      const completionPercentage =
+        total === 0 ? 0 : Math.round((completed / total) * 100);
+
+      return {
+        id: run.id,
+        patrolId: run.patrolId,
+        status: run.status,
+
+        vehicleId: run.vehicleId,
+
+        // 🔹 Client Info
+        clientName: run.order?.user?.name || null,
+        clientEmail: run.order?.user?.email || null,
+
+        // 🔹 Order Info
+        locationName: run.order?.locationName || null,
+        orderStartTime: run.order?.startTime || null,
+        orderStartDate: run.order?.startDate || null,
+        orderStatus: run.order?.status || null,
+
+        // 🔹 Execution Metrics
+        totalSites: run.totalSites,
+        completedSites: run.completedSites,
+
+        totalSubSites: run.totalSubSites,
+        completedSubSites: run.completedSubSites,
+
+        totalCheckpoints: run.totalCheckpoints,
+        completedCheckpoints: run.completedCheckpoints,
+
+        completionPercentage,
+        hasDeviation:
+          run.status === "completed" &&
+          run.completedCheckpoints < run.totalCheckpoints,
+
+        // 🔹 Guards (Multiple)
+        guards: run.guards.map((guard) => ({
+          id: guard.id,
+          name: guard.name,
+          status: guard.PatrolGuards.status,
+          clockInTime: guard.PatrolGuards.clockInTime,
+          clockOutTime: guard.PatrolGuards.clockOutTime,
+          totalHours: guard.PatrolGuards.totalHours,
+        })),
+
+        startDateTime: run.startDateTime,
+        estimatedCompletion: run.estimatedCompletion,
+      };
+    });
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      total: formattedRuns.length,
+      data: formattedRuns,
+    });
+  } catch (error) {
+    console.error("GET ALL PATROL RUNS ERROR:", error);
+    return next(
+      new ErrorHandler(
+        "Failed to fetch patrol runs",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
 

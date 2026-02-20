@@ -15,6 +15,7 @@ import { createPatrolSite,
     getPatrolRunById,
 getPatrolSiteDetails,
 getPatrolSubSiteDetails,
+getAllPatrolRunsForAdmin
  } from "./patrolling.controller.js";
 
 const route = express.Router();
@@ -34,5 +35,6 @@ route.delete("/deletePatrolRun/:patrolId", auth, isAdmin, deletePatrolRun);
 route.get("/getPatrolRunById/:patrolId", auth, isAdmin, getPatrolRunById);
 route.get("/getPatrolSiteDetails/:patrolRunId/:siteId", auth, isGaurd, getPatrolSiteDetails);
 route.get("/getPatrolSubSiteDetails/:patrolRunId/:subSiteId",auth, isGaurd, getPatrolSubSiteDetails);
+route.get("/getAllPatrolRunsForAdmin", auth, isAdmin, getAllPatrolRunsForAdmin);
 
 export default route;
