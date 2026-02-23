@@ -35,7 +35,7 @@ route.delete("/deletePatrolSite/:siteId", auth, isAdmin, deletePatrolSite);
 route.delete("/deletePatrolSubSite/:subSiteId", auth, isAdmin, deletePatrolSubSite);
 route.delete("/deleteCheckpoint/:checkpointId", auth, isAdmin, deleteCheckpoint);
 route.delete("/deletePatrolRun/:patrolId", auth, isAdmin, deletePatrolRun);
-route.get("/getPatrolRunById/:patrolId", auth, isAdmin, getPatrolRunById);
+// route.get("/getPatrolRunById/:patrolId", auth, isAdmin, getPatrolRunById);
 route.get("/getPatrolSiteDetails/:patrolRunId/:siteId", auth, isGaurd, getPatrolSiteDetails);
 route.get("/getPatrolSubSiteDetails/:patrolRunId/:subSiteId",auth, isGaurd, getPatrolSubSiteDetails);
 route.get("/getAllPatrolRunsForAdmin", auth, isAdmin, getAllPatrolRunsForAdmin);

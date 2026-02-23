@@ -7,6 +7,8 @@ import User from "../user/user.model.js";
 import { getTimeZone } from "../../utils/timeZone.js";
 import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
 import { notifyAdminOnly } from "../../utils/notifyAdminOnly.helper.js";
+import PatrolRun from "../patrolling/patrolRun.model.js";
+
 
 
 /**
@@ -285,6 +287,62 @@ if (
       }
     }
     console.log(`✅ Shift status cron updated shifts`);
+
+    /**
+ * ===============================
+ * 🚓 PATROL RUN STATUS CRON
+ * ===============================
+ */
+
+const patrolRuns = await PatrolRun.findAll({
+  where: {
+    status: {
+      [Op.in]: ["pending", "upcoming", "ongoing"],
+    },
+  },
+});
+
+for (const patrolRun of patrolRuns) {
+  const estimatedEnd = patrolRun.estimatedCompletion
+    ? moment(patrolRun.estimatedCompletion).tz(tz)
+    : null;
+
+  if (!estimatedEnd) continue;
+
+  /**
+   * 🔴 CASE 1 & 2:
+   * pending/upcoming → estimatedCompletion passed
+   * → mark ABSENT
+   */
+  if (
+    ["pending", "upcoming"].includes(patrolRun.status) &&
+    now.isAfter(estimatedEnd)
+  ) {
+    await patrolRun.update({ status: "absent" });
+
+    console.log(
+      `🚨 PatrolRun ${patrolRun.id} marked ABSENT (missed start)`
+    );
+
+    continue;
+  }
+
+  /**
+   * 🟡 CASE 3:
+   * ongoing → estimatedCompletion passed
+   * → mark DELAYED
+   */
+  if (
+    patrolRun.status === "ongoing" &&
+    now.isAfter(estimatedEnd)
+  ) {
+    await patrolRun.update({ status: "delayed" });
+
+    console.log(
+      `⏳ PatrolRun ${patrolRun.id} marked DELAYED`
+    );
+  }
+}
   } catch (error) {
     console.error("ABSENT CRON ERROR:", error);
   }

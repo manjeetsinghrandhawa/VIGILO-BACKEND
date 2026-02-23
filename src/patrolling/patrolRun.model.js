@@ -50,7 +50,7 @@ const PatrolRun = sequelize.define(
 
     // 🔵 Execution lifecycle
     status: {
-      type: DataTypes.ENUM("accepted","rejected","pending","upcoming","ongoing", "scheduled", "active", "completed"),
+      type: DataTypes.ENUM("accepted","rejected","pending","upcoming","ongoing","delayed","absent","scheduled", "active", "completed"),
       defaultValue: "pending",
     },
 
