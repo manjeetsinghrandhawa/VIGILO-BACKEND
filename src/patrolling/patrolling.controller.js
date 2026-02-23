@@ -160,20 +160,84 @@ export const getAllPatrolSites = async (req, res, next) => {
 
     const { count, rows } = await PatrolSite.findAndCountAll({
       include: [
+        // ===============================
+        // 🏢 SUB SITES (with checkpoints + QR)
+        // ===============================
         {
           model: PatrolSubSite,
           as: "subSites",
-          attributes: ["id", "name"],
+          attributes: [
+            "id",
+            "name",
+            "unitPrice",
+            "estimatedDuration",
+            "status",
+            "createdAt",
+          ],
+          include: [
+            {
+              model: PatrolCheckpoint,
+              as: "checkpoints",
+              attributes: [
+                "id",
+                "name",
+                "latitude",
+                "longitude",
+                "verificationRange",
+                "priorityLevel",
+                "status",
+                "createdAt",
+              ],
+              include: [
+                {
+  model: QR,
+  as: "qr",
+  attributes: ["id", "qrUrl", "latitude", "longitude", "createdAt"],
+}
+              ],
+            },
+          ],
         },
+
+        // ===============================
+        // 📍 SITE LEVEL CHECKPOINTS (with QR)
+        // ===============================
+        {
+          model: PatrolCheckpoint,
+          as: "checkpoints",
+          attributes: [
+            "id",
+            "name",
+            "latitude",
+            "longitude",
+            "verificationRange",
+            "priorityLevel",
+            "status",
+            "createdAt",
+          ],
+          include: [
+            {
+  model: QR,
+  as: "qr",
+  attributes: ["id", "qrUrl", "latitude", "longitude", "createdAt"],
+}
+          ],
+        },
+
+        // ===============================
+        // 👤 CLIENT
+        // ===============================
         {
           model: User,
           as: "client",
           attributes: ["id", "name", "email"],
         },
       ],
+
       order: [["createdAt", "DESC"]],
       limit: Number(limit),
       offset: Number(offset),
+      distinct: true, // 🔥 VERY IMPORTANT when using nested includes
     });
 
     return res.status(StatusCodes.OK).json({
@@ -183,6 +247,7 @@ export const getAllPatrolSites = async (req, res, next) => {
       totalPages: Math.ceil(count / limit),
       data: rows,
     });
+
   } catch (error) {
     console.error("GET PATROL SITES ERROR:", error);
     return next(
