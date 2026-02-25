@@ -825,7 +825,7 @@ export const deletePatrolRun = async (req, res) => {
       });
     }
 
-    await patrolRun.destroy(); // hard delete
+    await patrolRun.destroy({ force: true }); // hard delete
 
     return res.status(200).json({
       success: true,
