@@ -1161,7 +1161,41 @@ export const getPatrolSubSiteDetails = async (req, res, next) => {
 
 export const getAllPatrolRunsForAdmin = async (req, res, next) => {
   try {
-    const patrolRuns = await PatrolRun.findAll({
+    let { page = 1, limit = 10, status, search = "" } = req.query;
+
+    page = parseInt(page);
+    limit = parseInt(limit);
+
+    if (isNaN(page) || page < 1) page = 1;
+    if (isNaN(limit) || limit < 1) limit = 10;
+
+    const offset = (page - 1) * limit;
+
+    const allowedStatuses = [
+      "pending",
+      "scheduled",
+      "active",
+      "completed",
+      "cancelled",
+      "absent",
+    ];
+
+    const searchFilter = search
+      ? {
+          [Op.or]: [
+            { patrolId: { [Op.iLike]: `%${search}%` } },
+            { vehicleId: { [Op.iLike]: `%${search}%` } },
+          ],
+        }
+      : {};
+
+    const { count, rows: patrolRuns } = await PatrolRun.findAndCountAll({
+      where: {
+        ...searchFilter,
+        ...(status &&
+          allowedStatuses.includes(status) && { status }),
+      },
+
       include: [
         {
           model: Order,
@@ -1173,17 +1207,44 @@ export const getAllPatrolRunsForAdmin = async (req, res, next) => {
             "startDate",
             "status",
           ],
+          where: search
+            ? {
+                [Op.or]: [
+                  {
+                    locationName: {
+                      [Op.iLike]: `%${search}%`,
+                    },
+                  },
+                  {
+                    startDate: {
+                      [Op.iLike]: `%${search}%`,
+                    },
+                  },
+                ],
+              }
+            : undefined,
+          required: false,
+
           include: [
             {
               model: User,
-              as: "user", // Client
+              as: "user",
               attributes: ["id", "name", "email"],
+              where: search
+                ? {
+                    [Op.or]: [
+                      { name: { [Op.iLike]: `%${search}%` } },
+                      { email: { [Op.iLike]: `%${search}%` } },
+                    ],
+                  }
+                : undefined,
+              required: false,
             },
           ],
         },
         {
           model: User,
-          as: "guards", // via belongsToMany
+          as: "guards",
           attributes: ["id", "name"],
           through: {
             attributes: [
@@ -1193,8 +1254,18 @@ export const getAllPatrolRunsForAdmin = async (req, res, next) => {
               "totalHours",
             ],
           },
+          where: search
+            ? {
+                name: { [Op.iLike]: `%${search}%` },
+              }
+            : undefined,
+          required: false,
         },
       ],
+
+      distinct: true, // prevents wrong count
+      limit,
+      offset,
       order: [["createdAt", "DESC"]],
     });
 
@@ -1209,35 +1280,29 @@ export const getAllPatrolRunsForAdmin = async (req, res, next) => {
         id: run.id,
         patrolId: run.patrolId,
         status: run.status,
-
         vehicleId: run.vehicleId,
 
-        // 🔹 Client Info
         clientName: run.order?.user?.name || null,
         clientEmail: run.order?.user?.email || null,
 
-        // 🔹 Order Info
         locationName: run.order?.locationName || null,
         orderStartTime: run.order?.startTime || null,
         orderStartDate: run.order?.startDate || null,
         orderStatus: run.order?.status || null,
 
-        // 🔹 Execution Metrics
         totalSites: run.totalSites,
         completedSites: run.completedSites,
-
         totalSubSites: run.totalSubSites,
         completedSubSites: run.completedSubSites,
-
         totalCheckpoints: run.totalCheckpoints,
         completedCheckpoints: run.completedCheckpoints,
 
         completionPercentage,
+
         hasDeviation:
           run.status === "completed" &&
           run.completedCheckpoints < run.totalCheckpoints,
 
-        // 🔹 Guards (Multiple)
         guards: run.guards.map((guard) => ({
           id: guard.id,
           name: guard.name,
@@ -1254,8 +1319,14 @@ export const getAllPatrolRunsForAdmin = async (req, res, next) => {
 
     return res.status(StatusCodes.OK).json({
       success: true,
-      total: formattedRuns.length,
+      message: "Patrol runs fetched successfully",
       data: formattedRuns,
+      pagination: {
+        total: count,
+        page,
+        totalPages: Math.ceil(count / limit),
+        limit,
+      },
     });
   } catch (error) {
     console.error("GET ALL PATROL RUNS ERROR:", error);
