@@ -1184,77 +1184,61 @@ export const getAllPatrolRunsForAdmin = async (req, res, next) => {
       "completed",
     ];
 
-    search = search?.trim();
+    const { count, rows: patrolRuns } = await PatrolRun.findAndCountAll({
+    where: {
+      // Status filter
+      ...(status && allowedStatuses.includes(status) && { status }),
 
-    const whereCondition = {
-      ...(status &&
-        allowedStatuses.includes(status) && { status }),
-
+      // Simple Search (ONLY on PatrolRun table like Orders API)
       ...(search && {
         [Op.or]: [
           { patrolId: { [Op.iLike]: `%${search}%` } },
           { vehicleId: { [Op.iLike]: `%${search}%` } },
-
-          // Order fields
-          { "$order.locationName$": { [Op.iLike]: `%${search}%` } },
-          { "$order.startDate$": { [Op.iLike]: `%${search}%` } },
-
-          // Client (User under Order)
-          { "$order.user.name$": { [Op.iLike]: `%${search}%` } },
-          { "$order.user.email$": { [Op.iLike]: `%${search}%` } },
-
-          // Guards
-          { "$guards.name$": { [Op.iLike]: `%${search}%` } },
         ],
       }),
-    };
+    },
 
-    const { count, rows: patrolRuns } = await PatrolRun.findAndCountAll({
-      where: whereCondition,
-
-      include: [
-        {
-          model: Order,
-          as: "order",
-          attributes: [
-            "id",
-            "locationName",
-            "startTime",
-            "startDate",
-            "status",
-          ],
-          required: false,
-          include: [
-            {
-              model: User,
-              as: "user",
-              attributes: ["id", "name", "email"],
-              required: false,
-            },
-          ],
-        },
-        {
-          model: User,
-          as: "guards",
-          attributes: ["id", "name"],
-          through: {
-            attributes: [
-              "status",
-              "clockInTime",
-              "clockOutTime",
-              "totalHours",
-            ],
+    include: [
+      {
+        model: Order,
+        as: "order",
+        attributes: [
+          "id",
+          "locationName",
+          "startDate",
+          "startTime",
+          "status",
+        ],
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["id", "name", "email"],
           },
-          required: false,
+        ],
+      },
+      {
+        model: User,
+        as: "guards",
+        attributes: ["id", "name"],
+        through: {
+          attributes: [
+            "status",
+            "clockInTime",
+            "clockOutTime",
+            "totalHours",
+          ],
         },
-      ],
+      },
+    ],
 
-      distinct: true, // VERY IMPORTANT for correct count
-      subQuery: false,
-      limit,
-      offset,
-      order: [["createdAt", "DESC"]],
-    });
+    distinct: true,     // needed because of belongsToMany
+    subQuery: false,    // prevent pagination bugs
+
+    limit,
+    offset,
+    order: [["createdAt", "DESC"]],
+  });
 
     const formattedRuns = patrolRuns.map((run) => {
       const total = run.totalCheckpoints || 0;
