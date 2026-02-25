@@ -1250,6 +1250,7 @@ export const getAllPatrolRunsForAdmin = async (req, res, next) => {
       ],
 
       distinct: true, // VERY IMPORTANT for correct count
+      subQuery: false,
       limit,
       offset,
       order: [["createdAt", "DESC"]],
