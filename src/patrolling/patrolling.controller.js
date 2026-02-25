@@ -734,7 +734,7 @@ export const deletePatrolSite = async (req, res, next) => {
       );
     }
 
-    await site.destroy(); // soft delete
+    await site.destroy({ force: true }); // soft delete
 
     return res.status(StatusCodes.OK).json({
       success: true,
@@ -764,7 +764,7 @@ export const deletePatrolSubSite = async (req, res, next) => {
       );
     }
 
-    await subSite.destroy(); // soft delete
+    await subSite.destroy({ force: true }); // soft delete
 
     return res.status(StatusCodes.OK).json({
       success: true,
@@ -794,7 +794,7 @@ export const deleteCheckpoint = async (req, res, next) => {
       );
     }
 
-    await checkpoint.destroy(); // soft delete
+    await checkpoint.destroy({ force: true }); // hard delete
 
     return res.status(StatusCodes.OK).json({
       success: true,
