@@ -1172,24 +1172,45 @@ export const getAllPatrolRunsForAdmin = async (req, res, next) => {
     const offset = (page - 1) * limit;
 
     const allowedStatuses = [
-      "accepted","rejected","pending","upcoming","ongoing","delayed","absent","scheduled", "active", "completed"
+      "accepted",
+      "rejected",
+      "pending",
+      "upcoming",
+      "ongoing",
+      "delayed",
+      "absent",
+      "scheduled",
+      "active",
+      "completed",
     ];
 
-    const searchFilter = search
-      ? {
-          [Op.or]: [
-            { patrolId: { [Op.iLike]: `%${search}%` } },
-            { vehicleId: { [Op.iLike]: `%${search}%` } },
-          ],
-        }
-      : {};
+    search = search?.trim();
+
+    const whereCondition = {
+      ...(status &&
+        allowedStatuses.includes(status) && { status }),
+
+      ...(search && {
+        [Op.or]: [
+          { patrolId: { [Op.iLike]: `%${search}%` } },
+          { vehicleId: { [Op.iLike]: `%${search}%` } },
+
+          // Order fields
+          { "$order.locationName$": { [Op.iLike]: `%${search}%` } },
+          { "$order.startDate$": { [Op.iLike]: `%${search}%` } },
+
+          // Client (User under Order)
+          { "$order.user.name$": { [Op.iLike]: `%${search}%` } },
+          { "$order.user.email$": { [Op.iLike]: `%${search}%` } },
+
+          // Guards
+          { "$guards.name$": { [Op.iLike]: `%${search}%` } },
+        ],
+      }),
+    };
 
     const { count, rows: patrolRuns } = await PatrolRun.findAndCountAll({
-      where: {
-        ...searchFilter,
-        ...(status &&
-          allowedStatuses.includes(status) && { status }),
-      },
+      where: whereCondition,
 
       include: [
         {
@@ -1202,37 +1223,12 @@ export const getAllPatrolRunsForAdmin = async (req, res, next) => {
             "startDate",
             "status",
           ],
-          where: search
-            ? {
-                [Op.or]: [
-                  {
-                    locationName: {
-                      [Op.iLike]: `%${search}%`,
-                    },
-                  },
-                  {
-                    startDate: {
-                      [Op.iLike]: `%${search}%`,
-                    },
-                  },
-                ],
-              }
-            : undefined,
           required: false,
-
           include: [
             {
               model: User,
               as: "user",
               attributes: ["id", "name", "email"],
-              where: search
-                ? {
-                    [Op.or]: [
-                      { name: { [Op.iLike]: `%${search}%` } },
-                      { email: { [Op.iLike]: `%${search}%` } },
-                    ],
-                  }
-                : undefined,
               required: false,
             },
           ],
@@ -1249,16 +1245,11 @@ export const getAllPatrolRunsForAdmin = async (req, res, next) => {
               "totalHours",
             ],
           },
-          where: search
-            ? {
-                name: { [Op.iLike]: `%${search}%` },
-              }
-            : undefined,
           required: false,
         },
       ],
 
-      distinct: true, // prevents wrong count
+      distinct: true, // VERY IMPORTANT for correct count
       limit,
       offset,
       order: [["createdAt", "DESC"]],
@@ -1312,7 +1303,7 @@ export const getAllPatrolRunsForAdmin = async (req, res, next) => {
       };
     });
 
-    return res.status(StatusCodes.OK).json({
+    return res.status(200).json({
       success: true,
       message: "Patrol runs fetched successfully",
       data: formattedRuns,
@@ -1325,10 +1316,11 @@ export const getAllPatrolRunsForAdmin = async (req, res, next) => {
     });
   } catch (error) {
     console.error("GET ALL PATROL RUNS ERROR:", error);
+
     return next(
       new ErrorHandler(
         "Failed to fetch patrol runs",
-        StatusCodes.INTERNAL_SERVER_ERROR
+        500
       )
     );
   }
