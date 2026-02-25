@@ -1172,12 +1172,7 @@ export const getAllPatrolRunsForAdmin = async (req, res, next) => {
     const offset = (page - 1) * limit;
 
     const allowedStatuses = [
-      "pending",
-      "scheduled",
-      "active",
-      "completed",
-      "cancelled",
-      "absent",
+      "accepted","rejected","pending","upcoming","ongoing","delayed","absent","scheduled", "active", "completed"
     ];
 
     const searchFilter = search
