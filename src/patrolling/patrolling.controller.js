@@ -1536,7 +1536,7 @@ export const scanCheckpoint = async (req, res, next) => {
               status:
                 coordinateRange === "In-range"
                   ? "completed"
-                  : "missed",
+                  : "completed", // Mark as completed even if out of range, but we can track deviation with coordinateRange
               scannedAt: new Date(),
               coordinates,
               coordinateRange,
@@ -1561,7 +1561,7 @@ export const scanCheckpoint = async (req, res, next) => {
                   status:
                     coordinateRange === "In-range"
                       ? "completed"
-                      : "missed",
+                      : "completed", // Mark as completed even if out of range, but we can track deviation with coordinateRange
                   scannedAt: new Date(),
                   coordinates,
                   coordinateRange,
@@ -1624,13 +1624,13 @@ if (completedCheckpoints === totalCheckpoints && totalCheckpoints > 0) {
       checkpoints: sub.checkpoints?.map((cp) => ({
         ...cp,
         status:
-          cp.status === "missed" ? "missed" : "completed",
+          cp.status === "missed" ? "completed" : "completed",
       })),
     })) || [],
     checkpoints: site.checkpoints?.map((cp) => ({
       ...cp,
       status:
-        cp.status === "missed" ? "missed" : "completed",
+        cp.status === "missed" ? "completed" : "completed",
     })) || [],
   }));
 
@@ -1654,7 +1654,7 @@ if (completedCheckpoints === totalCheckpoints && totalCheckpoints > 0) {
         checkpointStatus:
           coordinateRange === "In-range"
             ? "completed"
-            : "missed",
+            : "completed", // Mark as completed even if out of range, but we can track deviation with coordinateRange
         completedCheckpoints,
         totalCheckpoints,
         completionPercentage,
