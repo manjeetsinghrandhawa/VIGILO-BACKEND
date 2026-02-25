@@ -7,11 +7,13 @@ import ShiftChangeRequest from "../src/order/shiftChangeRequest.model.js";
 QR.belongsTo(PatrolCheckPoint, {
   foreignKey: "checkPointId",
   as: "checkPoint",
+  onDelete: "CASCADE",
 });
 
 PatrolCheckPoint.hasOne(QR, {
   foreignKey: "checkPointId",
   as: "qr",
+  onDelete: "CASCADE",
 });
 
 Static.hasMany(ShiftChangeRequest, {
