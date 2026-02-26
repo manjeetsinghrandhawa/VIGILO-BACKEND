@@ -19,7 +19,9 @@ getAllPatrolRunsForAdmin,
 getPatrolRunByIdForAdmin,
 scanCheckpoint,
 viewCheckpointById,
-editPatrolRun
+editPatrolRun,
+getAllPatrolSubSites,
+getAllPatrolCheckpoints
  } from "./patrolling.controller.js";
 
 const route = express.Router();
@@ -44,5 +46,7 @@ route.get("/getPatrolRunByIdForAdmin/:id", auth, isAdmin, getPatrolRunByIdForAdm
 route.post("/scanCheckpoint", auth, isGaurd, scanCheckpoint);
 route.get("/viewCheckpointById/:patrolRunId/:checkpointId", auth, isGaurd, viewCheckpointById);
 route.put("/editPatrolRun/:id", auth, isAdmin, editPatrolRun);
+route.get("/getAllPatrolSubSites", auth, isAdmin, getAllPatrolSubSites);
+route.get("/getAllCheckpoints", auth, isAdmin, getAllPatrolCheckpoints);
 
 export default route;

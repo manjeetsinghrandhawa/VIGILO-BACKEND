@@ -2110,3 +2110,156 @@ export const editPatrolRun = async (req, res) => {
     });
   }
 };
+
+export const getAllPatrolSubSites = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 10, siteId } = req.query;
+
+    const offset = (page - 1) * limit;
+
+    const whereClause = {};
+
+    // Optional filter by site
+    if (siteId) {
+      whereClause.siteId = siteId;
+    }
+
+    const { count, rows } = await PatrolSubSite.findAndCountAll({
+      where: whereClause,
+
+      include: [
+        // ===============================
+        // 📍 PARENT SITE
+        // ===============================
+        {
+          model: PatrolSite,
+          as: "site",
+          attributes: ["id", "name", "address", "status"],
+        },
+
+        // ===============================
+        // 📌 CHECKPOINTS (with QR)
+        // ===============================
+        {
+          model: PatrolCheckpoint,
+          as: "checkpoints",
+          attributes: [
+            "id",
+            "name",
+            "latitude",
+            "longitude",
+            "verificationRange",
+            "priorityLevel",
+            "status",
+            "createdAt",
+          ],
+          include: [
+            {
+              model: QR,
+              as: "qr",
+              attributes: ["id", "qrUrl", "latitude", "longitude", "createdAt"],
+            },
+          ],
+        },
+      ],
+
+      order: [["createdAt", "DESC"]],
+      limit: Number(limit),
+      offset: Number(offset),
+      distinct: true, // 🔥 VERY IMPORTANT
+    });
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      total: count,
+      page: Number(page),
+      totalPages: Math.ceil(count / limit),
+      data: rows,
+    });
+
+  } catch (error) {
+    console.error("GET PATROL SUB-SITES ERROR:", error);
+
+    return next(
+      new ErrorHandler(
+        "Failed to fetch patrol sub-sites",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
+
+export const getAllPatrolCheckpoints = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 10, siteId, subSiteId } = req.query;
+
+    const offset = (page - 1) * limit;
+
+    const whereClause = {};
+
+    // Optional filters
+    if (siteId) {
+      whereClause.siteId = siteId;
+    }
+
+    if (subSiteId) {
+      whereClause.subSiteId = subSiteId;
+    }
+
+    const { count, rows } = await PatrolCheckpoint.findAndCountAll({
+      where: whereClause,
+
+      include: [
+        // ===============================
+        // 🏢 SITE
+        // ===============================
+        {
+          model: PatrolSite,
+          as: "site",
+          attributes: ["id", "name", "address", "status"],
+        },
+
+        // ===============================
+        // 🏢 SUB SITE
+        // ===============================
+        {
+          model: PatrolSubSite,
+          as: "subSite",
+          attributes: ["id", "name", "status"],
+        },
+
+        // ===============================
+        // 🔳 QR
+        // ===============================
+        {
+          model: QR,
+          as: "qr",
+          attributes: ["id", "qrUrl", "latitude", "longitude", "createdAt"],
+        },
+      ],
+
+      order: [["createdAt", "DESC"]],
+      limit: Number(limit),
+      offset: Number(offset),
+      distinct: true,
+    });
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      total: count,
+      page: Number(page),
+      totalPages: Math.ceil(count / limit),
+      data: rows,
+    });
+
+  } catch (error) {
+    console.error("GET PATROL CHECKPOINTS ERROR:", error);
+
+    return next(
+      new ErrorHandler(
+        "Failed to fetch patrol checkpoints",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      )
+    );
+  }
+};
