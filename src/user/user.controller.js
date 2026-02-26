@@ -16,7 +16,7 @@ import { generateGuardCreatedTemplate } from "../templete/generateGuardCreatedTe
 // Register User
 // Register User
 export const registerUser = catchAsyncError(async (req, res, next) => {
-  const { name, email, password, address, mobile, avatar } = req.body;
+  const { name, email, password, address, mobile,countryCode, avatar } = req.body;
 
   if (!name || !email || !password || !address) {
     return next(
@@ -58,6 +58,7 @@ if (user && user.isVerified) {
     user.address = address;
     user.mobile = mobile || null;
     user.avatar = avatar || null;
+    user.countryCode = countryCode || null;
 
     await user.save();
   }
@@ -71,6 +72,7 @@ if (user && user.isVerified) {
       role: "user",
       mobile,
       avatar,
+      countryCode,
       address,
       isVerified: false,
     });

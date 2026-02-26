@@ -1812,3 +1812,301 @@ export const viewCheckpointById = async (req, res, next) => {
     );
   }
 };
+
+function checkIfSiteHasCompleted(site) {
+  if (site.checkpoints.some(cp => cp.status === "completed")) return true;
+
+  for (const sub of site.subSites) {
+    if (sub.checkpoints.some(cp => cp.status === "completed")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function buildSiteSnapshot(site, status) {
+  return {
+    id: site.id,
+    name: site.name,
+    address: site.address,
+    latitude: site.latitude,
+    longitude: site.longitude,
+    description: site.description,
+    status,
+    subSites: site.subSites.map(sub => ({
+      id: sub.id,
+      name: sub.name,
+      description: sub.description,
+      status,
+      checkpoints: sub.checkpoints.map(cp => ({
+        id: cp.id,
+        name: cp.name,
+        latitude: cp.latitude,
+        longitude: cp.longitude,
+        verificationRange: cp.verificationRange,
+        priorityLevel: cp.priorityLevel,
+        description: cp.description,
+        status,
+        scannedAt: null,
+        scannedBy: null,
+      })),
+    })),
+    checkpoints: site.checkpoints.map(cp => ({
+      id: cp.id,
+      name: cp.name,
+      latitude: cp.latitude,
+      longitude: cp.longitude,
+      verificationRange: cp.verificationRange,
+      priorityLevel: cp.priorityLevel,
+      description: cp.description,
+      status,
+      scannedAt: null,
+      scannedBy: null,
+    })),
+  };
+}
+
+function recalculateTotals(structure) {
+  let totalSites = structure.length;
+  let totalSubSites = 0;
+  let totalCheckpoints = 0;
+
+  structure.forEach(site => {
+    totalSubSites += site.subSites.length;
+    totalCheckpoints += site.checkpoints.length;
+
+    site.subSites.forEach(sub => {
+      totalCheckpoints += sub.checkpoints.length;
+    });
+  });
+
+  return { totalSites, totalSubSites, totalCheckpoints };
+}
+
+export const editPatrolRun = async (req, res) => {
+  const t = await sequelize.transaction();
+
+  try {
+    const { id } = req.params;
+    const {
+      addSites = [],
+      removeSiteIds = [],
+      addSubSites = [],
+      removeSubSiteIds = [],
+      addCheckpoints = [],
+      removeCheckpointIds = [],
+      newGuardId,
+    } = req.body;
+
+    const patrolRun = await PatrolRun.findOne({
+  where: { id: req.params.id },
+});
+
+    if (!patrolRun)
+      throw new Error("Patrol run not found");
+
+    if (patrolRun.status === "completed")
+      throw new Error("Completed patrol run cannot be edited");
+
+    let runStructure = JSON.parse(JSON.stringify(patrolRun.runStructure));
+
+    const newStatus =
+      patrolRun.status === "pending" ? "pending" : "upcoming";
+
+    // ==========================
+    // REMOVE CHECKPOINTS
+    // ==========================
+    runStructure.forEach(site => {
+      site.checkpoints = site.checkpoints.filter(cp => {
+        if (removeCheckpointIds.includes(cp.id)) {
+          if (cp.status === "completed")
+            throw new Error("Cannot remove completed checkpoint");
+          return false;
+        }
+        return true;
+      });
+
+      site.subSites.forEach(sub => {
+        sub.checkpoints = sub.checkpoints.filter(cp => {
+          if (removeCheckpointIds.includes(cp.id)) {
+            if (cp.status === "completed")
+              throw new Error("Cannot remove completed checkpoint");
+            return false;
+          }
+          return true;
+        });
+      });
+    });
+
+    // ==========================
+    // REMOVE SUBSITES
+    // ==========================
+    runStructure.forEach(site => {
+      site.subSites = site.subSites.filter(sub => {
+        if (removeSubSiteIds.includes(sub.id)) {
+          if (sub.checkpoints.some(cp => cp.status === "completed"))
+            throw new Error("Cannot remove subSite with completed checkpoints");
+          return false;
+        }
+        return true;
+      });
+    });
+
+    // ==========================
+    // REMOVE SITES
+    // ==========================
+    runStructure = runStructure.filter(site => {
+      if (removeSiteIds.includes(site.id)) {
+        const hasCompleted =
+          site.checkpoints.some(cp => cp.status === "completed") ||
+          site.subSites.some(sub =>
+            sub.checkpoints.some(cp => cp.status === "completed")
+          );
+
+        if (hasCompleted)
+          throw new Error("Cannot remove site with completed checkpoints");
+
+        return false;
+      }
+      return true;
+    });
+
+    // ==========================
+    // ADD NEW SITES
+    // ==========================
+    if (addSites.length) {
+      const sites = await PatrolSite.findAll({
+        where: { id: addSites },
+        include: [
+          {
+            model: PatrolSubSite,
+            as: "subSites",
+            include: [{ model: PatrolCheckpoint, as: "checkpoints" }],
+          },
+          { model: PatrolCheckpoint, as: "checkpoints" },
+        ],
+        transaction: t,
+      });
+
+      for (const site of sites) {
+        runStructure.push(buildSiteSnapshot(site, newStatus));
+      }
+    }
+
+    // ==========================
+    // ADD SUBSITES TO EXISTING SITE
+    // ==========================
+    for (const item of addSubSites) {
+      const parentSite = runStructure.find(s => s.id === item.parentSiteId);
+      if (!parentSite) throw new Error("Parent site not found");
+
+      const subSite = await PatrolSubSite.findByPk(item.subSiteId, {
+        include: [{ model: PatrolCheckpoint, as: "checkpoints" }],
+        transaction: t,
+      });
+
+      if (!subSite) throw new Error("SubSite not found");
+
+      parentSite.subSites.push({
+        id: subSite.id,
+        name: subSite.name,
+        description: subSite.description,
+        status: newStatus,
+        checkpoints: subSite.checkpoints.map(cp => ({
+          id: cp.id,
+          name: cp.name,
+          latitude: cp.latitude,
+          longitude: cp.longitude,
+          verificationRange: cp.verificationRange,
+          priorityLevel: cp.priorityLevel,
+          description: cp.description,
+          status: newStatus,
+          scannedAt: null,
+          scannedBy: null,
+        })),
+      });
+    }
+
+    // ==========================
+    // ADD CHECKPOINTS
+    // ==========================
+    for (const item of addCheckpoints) {
+      const checkpoint = await PatrolCheckpoint.findByPk(item.checkpointId, {
+        transaction: t,
+      });
+
+      if (!checkpoint) throw new Error("Checkpoint not found");
+
+      const cpSnapshot = {
+        id: checkpoint.id,
+        name: checkpoint.name,
+        latitude: checkpoint.latitude,
+        longitude: checkpoint.longitude,
+        verificationRange: checkpoint.verificationRange,
+        priorityLevel: checkpoint.priorityLevel,
+        description: checkpoint.description,
+        status: newStatus,
+        scannedAt: null,
+        scannedBy: null,
+      };
+
+      if (item.parentType === "site") {
+        const site = runStructure.find(s => s.id === item.parentId);
+        if (!site) throw new Error("Site not found");
+        site.checkpoints.push(cpSnapshot);
+      }
+
+      if (item.parentType === "subSite") {
+        runStructure.forEach(site => {
+          const sub = site.subSites.find(s => s.id === item.parentId);
+          if (sub) sub.checkpoints.push(cpSnapshot);
+        });
+      }
+    }
+
+    // ==========================
+    // UPDATE GUARD
+    // ==========================
+    if (newGuardId) {
+      await PatrolGuards.destroy({
+        where: { patrolRunId },
+        transaction: t,
+      });
+
+      await PatrolGuards.create(
+        {
+          patrolRunId,
+          guardId: newGuardId,
+          status: "pending",
+        },
+        { transaction: t }
+      );
+    }
+
+    const totals = recalculateTotals(runStructure);
+
+    await patrolRun.update(
+      {
+        runStructure,
+        totalSites: totals.totalSites,
+        totalSubSites: totals.totalSubSites,
+        totalCheckpoints: totals.totalCheckpoints,
+      },
+      { transaction: t }
+    );
+
+    await t.commit();
+
+    return res.status(200).json({
+      success: true,
+      message: "Patrol run updated successfully",
+      totals,
+    });
+  } catch (error) {
+    await t.rollback();
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
