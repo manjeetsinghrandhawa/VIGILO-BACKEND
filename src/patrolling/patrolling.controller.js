@@ -1328,6 +1328,14 @@ export const getPatrolRunByIdForAdmin = async (req, res, next) => {
         "runStructure",
         "createdAt",
         "updatedAt",
+        "totalSites",
+        "completedSites",
+        "totalSubSites",
+        "completedSubSites",
+        "totalCheckpoints",
+        "completedCheckpoints",
+        "missedCheckpoints",
+        "notes",
       ],
       include: [
         {
@@ -1347,14 +1355,14 @@ export const getPatrolRunByIdForAdmin = async (req, res, next) => {
             {
               model: User,
               as: "user", // client
-              attributes: ["id", "name", "email", "mobile"],
+              attributes: ["id", "name", "email", "mobile","avatar"],
             },
           ],
         },
         {
           model: User,
           as: "guards",
-          attributes: ["id", "name", "email"],
+          attributes: ["id", "name", "email", "avatar"],
           through: {
             attributes: [
               "status",
