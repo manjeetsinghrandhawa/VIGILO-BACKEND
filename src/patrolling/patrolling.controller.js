@@ -1334,7 +1334,6 @@ export const getPatrolRunByIdForAdmin = async (req, res, next) => {
         "completedSubSites",
         "totalCheckpoints",
         "completedCheckpoints",
-        "missedCheckpoints",
         "notes",
       ],
       include: [
@@ -1441,6 +1440,7 @@ export const getPatrolRunByIdForAdmin = async (req, res, next) => {
       id: guard.id,
       name: guard.name,
       email: guard.email,
+      avatar: guard.avatar,
       guardStatus: guard.PatrolGuards.status,
       clockInTime: guard.PatrolGuards.clockInTime,
       clockOutTime: guard.PatrolGuards.clockOutTime,
