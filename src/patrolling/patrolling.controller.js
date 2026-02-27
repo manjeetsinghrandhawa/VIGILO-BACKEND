@@ -555,10 +555,11 @@ export const createPatrolRun = async (req, res) => {
     const {
       patrolId,
       orderId,
-      guardId,
+      guardIds,
       vehicleId,
       startDateTime,
       estimatedCompletion,
+      unitPrice,
       notes,
       siteIds,
     } = req.body;
@@ -657,39 +658,63 @@ export const createPatrolRun = async (req, res) => {
       };
     });
 
+    // 🕒 Calculate total hours
+const start = new Date(startDateTime);
+const end = new Date(estimatedCompletion);
+
+const totalHours =
+  Math.abs(end - start) / (1000 * 60 * 60); // convert ms → hours
+
+// 💰 Total Patrol Cost
+const parsedUnitPrice = parseFloat(unitPrice);
+
+const totalPatrolCost = parsedUnitPrice * totalHours;
+
+const perGuardPayment =
+  totalPatrolCost / guardIds.length;
+
     // 3️⃣ Create Patrol Run
     const patrolRun = await PatrolRun.create(
       {
         patrolId,
         orderId,
-        guardId,
+        guardIds,
         siteIds,
         vehicleId,
         startDateTime,
         estimatedCompletion,
         notes,
+        unitPrice: parsedUnitPrice,
+        totalHours,
+        totalPatrolCost,
         runStructure,
         totalSites,
         totalSubSites,
         totalCheckpoints,
+        perGuardPayment, 
       },
       { transaction: t }
     );
 
-    await PatrolGuards.create(
-  {
-    patrolRunId: patrolRun.id, // foreign key
-    guardId: guardId,           // guard id
-    status: "pending",        // default status
-  },
-  { transaction: t }
-);
+    for (const guardId of guardIds) {
+  await PatrolGuards.create(
+    {
+      patrolRunId: patrolRun.id,
+      guardId,
+      paymentAmount: perGuardPayment,
+      status: "pending",
+    },
+    { transaction: t }
+  );
+}
 
     await t.commit();
 
     // 4️⃣ Fetch order & guard for response
     const order = await Order.findByPk(orderId);
-    const guard = await User.findByPk(guardId);
+    const guards = await User.findAll({
+  where: { id: guardIds },
+});
 
     return res.status(201).json({
       success: true,
@@ -709,9 +734,14 @@ export const createPatrolRun = async (req, res) => {
           completedSites: 0,
           completedSubSites: 0,
           completedCheckpoints: 0,
+          unitPrice,
+          totalHours,
+          totalPatrolCost,
+          perGuardPayment,
+
         },
         order,
-        guard,
+        guards,
         sites: runStructure,
       },
     });

@@ -28,11 +28,26 @@ const PatrolRun = sequelize.define(
   onDelete: "CASCADE",
 },
 
+guardIds: {
+  type: DataTypes.JSON,
+  allowNull: false,
+defaultValue: [],
+},
 
-    guardId: {
-      type: DataTypes.UUID,
-      allowNull: true,
-    },
+unitPrice: {
+  type: DataTypes.DECIMAL(10, 2),
+},
+totalHours: {
+  type: DataTypes.FLOAT,
+},
+
+totalPatrolCost: {
+  type: DataTypes.DECIMAL(10, 2),
+},
+
+perGuardPayment: {
+  type: DataTypes.DECIMAL(10, 2),
+},
 
     vehicleId: {
       type: DataTypes.UUID,
@@ -108,17 +123,6 @@ const PatrolRun = sequelize.define(
     timestamps: true,
   }
 );
-
-
-User.hasMany(PatrolRun, {
-  foreignKey: "guardId",
-  as: "patrolRun",
-});
-
-PatrolRun.belongsTo(User, {
-  foreignKey: "guardId",
-  as: "guard",
-});
 
 /**
  * ===========================

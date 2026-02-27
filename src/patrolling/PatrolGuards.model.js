@@ -31,6 +31,9 @@ const PatrolGuards = sequelize.define(
       },
       onDelete: "CASCADE",
     },
+    paymentAmount: {
+  type: DataTypes.DECIMAL(10, 2),
+},
 
     status: {
       type: DataTypes.ENUM(
