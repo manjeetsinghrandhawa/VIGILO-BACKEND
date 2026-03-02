@@ -837,89 +837,144 @@ export const getMyAllShifts = async (req, res, next) => {
 
       });
     }
+
+    // ===============================
+// 🔹 PATROL COUNTS
+// ===============================
+
+// ALL PATROL RUNS
+const patrolAllCount = await PatrolRun.count({
+  include: [
+    {
+      model: User,
+      as: "guards",
+      where: { id: guardId },
+      through: { attributes: [] },
+      required: true,
+    },
+  ],
+});
+
+// UPCOMING PATROL RUNS
+const patrolUpcomingCount = await PatrolRun.count({
+  where: { status: "upcoming" }, // adjust if your logic differs
+  include: [
+    {
+      model: User,
+      as: "guards",
+      where: { id: guardId },
+      through: { where: { status: "accepted" }, attributes: [] },
+      required: true,
+    },
+  ],
+});
+
+// PENDING PATROL RUNS
+const patrolPendingCount = await PatrolRun.count({
+  where: { status: "pending" },
+  include: [
+    {
+      model: User,
+      as: "guards",
+      where: { id: guardId },
+      through: { where: { status: "pending" }, attributes: [] },
+      required: true,
+    },
+  ],
+});
     // **
     //  * 🔹 FETCH PATROL RUNS (ONLY FOR ALL + NEW REQUESTS)
     //  */
     let patrolResponse = [];
 
-    if (filter === "all" || filter === "newRequests") {
-      let patrolWhere = { guardId };
+if (filter === "all" || filter === "newRequests") {
+  let patrolWhere = {};
 
-  // 🔥 Only pending for newRequests
   if (filter === "newRequests") {
     patrolWhere.status = "pending";
   }
-      const patrolRuns = await PatrolRun.findAll({
-        where: patrolWhere,
-        include: [
-          {
-            model: User,
-            as: "guards",
-             where: { id: guardId },
-            attributes: ["id", "name", "email"],
-           through: {
-          where: patrolWhere,
+
+  
+
+  const patrolRuns = await PatrolRun.findAll({
+    where: patrolWhere,
+    include: [
+      {
+        model: User,
+        as: "guards",
+        where: { id: guardId },
+        attributes: ["id", "name", "email"],
+        through: {
+          where:
+            filter === "newRequests"
+              ? { status: "pending" }
+              : {},
           attributes: ["status", "createdAt"],
         },
         required: true,
       },
-      
-        {
+      {
         model: Order,
         as: "order",
-        attributes: ["locationName", "locationAddress"],
+        attributes: [
+          "locationName",
+          "locationAddress",
+          "serviceType",
+        ],
       },
     ],
-        order: [["startDateTime", "DESC"]],
-      });
+    order: [["startDateTime", "DESC"]],
+  });
 
-      patrolResponse = patrolRuns.map((run) => {
-        const guard = run.guards[0];
+
+
+  patrolResponse = patrolRuns.map((run) => {
+    const guard = run.guards[0];
     const guardStatus = guard.PatrolGuards?.status;
 
-        return {
-          id: run.id,
-          patrolId: run.patrolId,
-          vehicleId: run.vehicleId,
-          orderId: run.orderId,
-    orderLocationName: run.order?.locationName || null,
-    orderLocationAddress: run.order?.locationAddress || null,
-          date: moment.utc(run.startDateTime).format("YYYY-MM-DD"),
-          type: run.order.serviceType || "patrol",
-          description: run.notes || "Patrol Run",
-          startTime: run.startDateTime,
-          endTime: run.estimatedCompletion,
-          status: run.status,
-          shiftTotalHours: null,
-          createdAt: run.createdAt,
-          totalSites: run.totalSites,
-          totalSubSites: run.totalSubSites,
-          totalCheckpoints: run.totalCheckpoints,
-          completedSites: run.completedSites,
-          completedSubSites: run.completedSubSites,
-          completedCheckpoints: run.completedCheckpoints,
-
-           guard: {
-      id: guard?.id,
-      name: guard?.name,
-      email: guard?.email,
-      guardStatus: guardStatus || "unknown",
-      assignedAt: guard.PatrolGuards?.createdAt,
-    },
-        };
-      });
-    }
+    return {
+      id: run.id,
+      patrolId: run.patrolId,
+      vehicleId: run.vehicleId,
+      orderId: run.orderId,
+      orderLocationName: run.order?.locationName || null,
+      orderLocationAddress: run.order?.locationAddress || null,
+      date: moment.utc(run.startDateTime).format("YYYY-MM-DD"),
+      type: run.order?.serviceType || "patrol",
+      description: run.notes || "Patrol Run",
+      startTime: run.startDateTime,
+      endTime: run.estimatedCompletion,
+      status: run.status,
+      shiftTotalHours: null,
+      createdAt: run.createdAt,
+      totalSites: run.totalSites,
+      totalSubSites: run.totalSubSites,
+      totalCheckpoints: run.totalCheckpoints,
+      completedSites: run.completedSites,
+      completedSubSites: run.completedSubSites,
+      completedCheckpoints: run.completedCheckpoints,
+      guard: {
+        id: guard?.id,
+        name: guard?.name,
+        email: guard?.email,
+        guardStatus: guardStatus || "unknown",
+        assignedAt: guard.PatrolGuards?.createdAt,
+      },
+    };
+  });
+}
 
     /**
-     * 🔥 MERGE STATIC + PATROL
+     * =====================================
+     * 🔥 MERGE + SORT + PAGINATE
+     * =====================================
      */
     let combined = [...response, ...patrolResponse];
 
-    combined.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+    combined.sort(
+      (a, b) => new Date(b.startTime) - new Date(a.startTime)
+    );
 
-    /**
-     * 🔹 PAGINATION AFTER MERGE
-     */
     const totalCombined = combined.length;
     const paginatedData = combined.slice(offset, offset + limit);
 
@@ -927,11 +982,13 @@ export const getMyAllShifts = async (req, res, next) => {
       success: true,
       message: "Shifts fetched successfully",
       filter,
-       counts: {
-        all: allCount,
-        upcoming: upcomingCount,
-        newRequests: newRequestsCount,
-      },
+      counts: {
+ counts: {
+  all: allCount + patrolAllCount,
+  upcoming: upcomingCount + patrolUpcomingCount,
+  newRequests: newRequestsCount + patrolPendingCount,
+},
+},
       data: paginatedData,
       pagination: {
         total: totalCombined,
