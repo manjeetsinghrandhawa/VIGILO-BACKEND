@@ -99,7 +99,8 @@ const Alarm = sequelize.define(
         "assigned",
         "in_progress",
         "resolved",
-        "cancelled"
+        "cancelled",
+        "pending"
       ),
       defaultValue: "active",
     },
@@ -127,20 +128,5 @@ const Alarm = sequelize.define(
   }
 );
 
-Alarm.belongsToMany(User, {
-  through: "AlarmGuards",
-  foreignKey: "alarmId",
-  otherKey: "userId",
-  as: "guards",
-  onDelete: "CASCADE",
-});
-
-User.belongsToMany(Alarm, {
-  through: "AlarmGuards",
-  foreignKey: "userId",
-  otherKey: "alarmId",
-  as: "alarms",
-  onDelete: "CASCADE",
-});
 
 export default Alarm;
