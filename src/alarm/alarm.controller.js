@@ -3,6 +3,8 @@ import Alarm from "./alarm.model.js";
 import userModel from "../user/user.model.js";
 import ErrorHandler from "../../utils/errorHandler.js";
 import AlarmGuards from "./alarmGuards.model.js";
+import PatrolSite from "../patrolling/patrolSite.model.js";
+import PatrolRun from "../patrolling/patrolRun.model.js";
 // import catchAsyncError from "../middlewares/catchAsyncError.js";
 
 import sequelize from "../../config/database.js";
@@ -17,7 +19,7 @@ export const createAlarm = async (req, res) => {
       description,
       alarmType,
       priority,
-      siteName,
+      siteId,
       specificLocation,
       guardIds,
       etaMinutes,
@@ -30,11 +32,11 @@ export const createAlarm = async (req, res) => {
        🔎 BASIC VALIDATIONS
     ===================================================== */
 
-    if (!title || !alarmType || !priority || !siteName) {
+    if (!title || !alarmType || !priority || !siteId) {
       return res.status(400).json({
         success: false,
         message:
-          "title, alarmType, priority and siteName are required fields",
+          "title, alarmType, priority and siteId are required fields",
       });
     }
 
@@ -52,39 +54,23 @@ export const createAlarm = async (req, res) => {
       });
     }
 
-    if (unitPrice < 0 ) {
+    if (unitPrice < 0) {
       return res.status(400).json({
         success: false,
-        message: "Price values must be non-negative",
+        message: "Unit price must be non-negative",
       });
     }
 
     /* =====================================================
-       🔎 ENUM VALIDATION
+       🔎 VERIFY SITE EXISTS
     ===================================================== */
 
-    const allowedAlarmTypes = [
-      "intrusion",
-      "panic",
-      "fire",
-      "medical",
-      "motion",
-      "other",
-    ];
+    const site = await PatrolSite.findByPk(siteId, { transaction: t });
 
-    const allowedPriorities = ["low", "medium", "high", "critical"];
-
-    if (!allowedAlarmTypes.includes(alarmType)) {
+    if (!site) {
       return res.status(400).json({
         success: false,
-        message: "Invalid alarmType value",
-      });
-    }
-
-    if (!allowedPriorities.includes(priority)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid priority value",
+        message: "Invalid siteId",
       });
     }
 
@@ -105,6 +91,34 @@ export const createAlarm = async (req, res) => {
     }
 
     /* =====================================================
+       🔎 FIND LATEST ONGOING PATROL CONTAINING THIS SITE
+    ===================================================== */
+
+    const ongoingPatrols = await PatrolRun.findAll({
+      where: { status: "ongoing" },
+      order: [["startDateTime", "DESC"]], // latest first
+      transaction: t,
+    });
+
+    const patrolRun = ongoingPatrols.find((run) =>
+      run.siteIds?.includes(siteId)
+    );
+
+    if (!patrolRun) {
+      return res.status(400).json({
+        success: false,
+        message: "No ongoing patrol found for this site",
+      });
+    }
+
+    /* =====================================================
+       🧮 CALCULATE TOTAL TIME
+    ===================================================== */
+
+    const totalTimeMinutes =
+      Number(slaTimeMinutes) + Number(etaMinutes || 0);
+
+    /* =====================================================
        🟢 CREATE ALARM
     ===================================================== */
 
@@ -114,19 +128,55 @@ export const createAlarm = async (req, res) => {
         description: description || null,
         alarmType,
         priority,
-        siteName: siteName.trim(),
+        patrolRunId: patrolRun.id,
+        patrolId: patrolRun.patrolId, // business patrol ID
+        siteId,
         specificLocation: specificLocation || null,
-        etaMinutes: etaMinutes || null,
+        etaMinutes,
         slaTimeMinutes,
+        totalTimeMinutes,
         unitPrice,
         price,
+        guardIds,
         status: "pending",
+        breach: false,
       },
       { transaction: t }
     );
 
     /* =====================================================
-       🟢 CREATE ALARM GUARDS
+       🟢 SAVE ALARM INTO PATROL runStructure SNAPSHOT
+    ===================================================== */
+
+    const updatedRunStructure = patrolRun.runStructure.map((site) => {
+      if (site.id === siteId) {
+        return {
+          ...site,
+          alarms: [
+            ...(site.alarms || []),
+            {
+              id: alarm.id,
+              title: alarm.title,
+              alarmType: alarm.alarmType,
+              priority: alarm.priority,
+              status: alarm.status,
+              breach: alarm.breach,
+              createdAt: alarm.createdAt,
+              guardIds: alarm.guardIds,
+            },
+          ],
+        };
+      }
+      return site;
+    });
+
+    await patrolRun.update(
+      { runStructure: updatedRunStructure },
+      { transaction: t }
+    );
+
+    /* =====================================================
+       🟢 CREATE ALARM GUARDS (UNCHANGED)
     ===================================================== */
 
     const alarmGuardsData = [];
@@ -154,29 +204,12 @@ export const createAlarm = async (req, res) => {
       success: true,
       type: "alarm",
       data: {
-        alarm: {
-          id: alarm.id,
-          title: alarm.title,
-          description: alarm.description,
-          alarmType: alarm.alarmType,
-          priority: alarm.priority,
-          siteName: alarm.siteName,
-          specificLocation: alarm.specificLocation,
-          etaMinutes: alarm.etaMinutes,
-          slaTimeMinutes: alarm.slaTimeMinutes,
-          unitPrice: alarm.unitPrice,
-          price: alarm.price,
-          status: alarm.status,
-          billed: alarm.billed,
-          createdAt: alarm.createdAt,
-          updatedAt: alarm.updatedAt,
+        alarm,
+        patrol: {
+          patrolRunId: patrolRun.id,
+          patrolId: patrolRun.patrolId,
         },
-        guards: guards.map((guard) => ({
-          id: guard.id,
-          name: guard.name,
-          email: guard.email,
-          phone: guard.phone,
-        })),
+        guards,
         alarmGuards: alarmGuardsData,
       },
     });

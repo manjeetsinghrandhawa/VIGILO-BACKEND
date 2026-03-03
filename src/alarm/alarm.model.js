@@ -1,6 +1,6 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../../config/database.js";
-import User from "../user/user.model.js";
+
 
 const Alarm = sequelize.define(
   "Alarm",
@@ -42,10 +42,24 @@ const Alarm = sequelize.define(
       allowNull: false,
     },
 
-    // Site / Location
-    siteName: {
-      type: DataTypes.STRING,
-      allowNull: false,
+    patrolRunId: {
+  type: DataTypes.UUID,
+  allowNull: true,
+  references: {
+    model: "PatrolRuns",
+    key: "id",
+  },
+  onDelete: "SET NULL",
+},
+
+    // ✅ SITE REFERENCE (FOREIGN KEY)
+    siteId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: "PatrolSites",
+        key: "id",
+      },
     },
 
     specificLocation: {
@@ -68,6 +82,13 @@ const Alarm = sequelize.define(
     },
 
     slaTimeMinutes: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      validate: {
+        min: 0,
+      },
+    },
+    totalTimeMinutes: {
       type: DataTypes.INTEGER,
       allowNull: false,
       validate: {
@@ -120,6 +141,15 @@ const Alarm = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },
+    totalTimeMinutes: {
+  type: DataTypes.INTEGER,
+  allowNull: true,
+},
+
+breach: {
+  type: DataTypes.BOOLEAN,
+  defaultValue: false,
+},
   },
   {
     timestamps: true,

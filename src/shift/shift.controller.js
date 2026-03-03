@@ -14,6 +14,7 @@ import PatrolGuards from "../patrolling/PatrolGuards.model.js";
 import PatrolSite from "../patrolling/patrolSite.model.js";
 import PatrolSubSite from "../patrolling/patrolSubSite.model.js";
 import PatrolCheckpoint from "../patrolling/patrolCheckpoint.model.js";
+import Alarm from "../alarm/alarm.model.js";
 
 export const assignShift = catchAsyncError(async (req, res, next) => {
   const { orderId } = req.params;
@@ -564,6 +565,7 @@ export const getMyShiftDetails = async (req, res, next) => {
         "completedCheckpoints",
         "createdAt",
         "updatedAt",
+        "unitPrice",
       ],
       include: [
         {
@@ -595,6 +597,28 @@ export const getMyShiftDetails = async (req, res, next) => {
             "serviceType",
           ],
         },
+        {
+  model: Alarm,
+  as: "alarms",
+  attributes: [
+    "id",
+    "title",
+    "description",
+    "alarmType",
+    "priority",
+    "status",
+    "breach",
+    "siteId",
+    "specificLocation",
+    "etaMinutes",
+    "slaTimeMinutes",
+    "totalTimeMinutes",
+    "unitPrice",
+    "price",
+    "createdAt",
+    "updatedAt",
+  ],
+}
       ],
     });
 
@@ -622,6 +646,7 @@ export const getMyShiftDetails = async (req, res, next) => {
             completedCheckpoints: patrolRun.completedCheckpoints,
             createdAt: patrolRun.createdAt,
           },
+          alarms: patrolRun.alarms || [],
 
           order: patrolRun.order,
 
