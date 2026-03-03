@@ -223,3 +223,153 @@ export const createAlarm = async (req, res) => {
     });
   }
 };
+
+export const getNewAlarmsForGuard = async (req, res) => {
+  try {
+    const guardId = req.user.id; // from JWT middleware
+
+    const alarmGuards = await AlarmGuards.findAll({
+      where: {
+        guardId,
+        status: "pending", // only new alarms
+      },
+      include: [
+        {
+          model: Alarm,
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    if (!alarmGuards.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No new alarms",
+        data: [],
+      });
+    }
+
+    const alarms = alarmGuards.map((ag) => ({
+      alarmId: ag.Alarm.id,
+      title: ag.Alarm.title,
+      description: ag.Alarm.description,
+      priority: ag.Alarm.priority,
+      siteName: ag.Alarm.siteName,
+      specificLocation: ag.Alarm.specificLocation,
+      etaMinutes: ag.Alarm.etaMinutes,
+      slaTimeMinutes: ag.Alarm.slaTimeMinutes,
+      status: ag.status,
+      createdAt: ag.Alarm.createdAt,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      type: "alarm_popup",
+      data: alarms,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const getAlarmDetailsForGuard = async (req, res) => {
+  try {
+    const { alarmId } = req.params;
+    const guardId = req.user.id;
+
+    const alarmGuard = await AlarmGuards.findOne({
+      where: {
+        alarmId,
+        guardId,
+      },
+      include: [
+        {
+          model: Alarm,
+        },
+      ],
+    });
+
+    if (!alarmGuard) {
+      return res.status(404).json({
+        success: false,
+        message: "Alarm not found or not assigned to you",
+      });
+    }
+
+    const alarm = alarmGuard.Alarm;
+
+    return res.status(200).json({
+      success: true,
+      type: "alarm_details",
+      data: {
+        alarmId: alarm.id,
+        title: alarm.title,
+        description: alarm.description,
+        alarmType: alarm.alarmType,
+        priority: alarm.priority,
+        siteName: alarm.siteName,
+        specificLocation: alarm.specificLocation,
+        etaMinutes: alarm.etaMinutes,
+        slaTimeMinutes: alarm.slaTimeMinutes,
+        unitPrice: alarm.unitPrice,
+        price: alarm.price,
+        status: alarmGuard.status,
+        createdAt: alarm.createdAt,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const respondToAlarm = async (req, res) => {
+  try {
+    const { alarmId } = req.params;
+    const { action } = req.body;
+    const guardId = req.user.id;
+
+    if (!["accept", "reject"].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: "Action must be accept or reject",
+      });
+    }
+
+    const alarmGuard = await AlarmGuards.findOne({
+      where: { alarmId, guardId },
+    });
+
+    if (!alarmGuard) {
+      return res.status(404).json({
+        success: false,
+        message: "Alarm not found",
+      });
+    }
+
+    if (alarmGuard.status !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Alarm already responded",
+      });
+    }
+
+    alarmGuard.status = action === "accept" ? "accepted" : "rejected";
+    await alarmGuard.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Alarm ${action}ed successfully`,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
