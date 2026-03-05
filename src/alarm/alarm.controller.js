@@ -131,6 +131,9 @@ export const createAlarm = async (req, res) => {
         patrolRunId: patrolRun.id,
         patrolId: patrolRun.patrolId, // business patrol ID
         siteId,
+        siteName: site.name,
+        siteAddress: site.address || null,
+        vehicleId: patrolRun.vehicleId || null,
         specificLocation: specificLocation || null,
         etaMinutes,
         slaTimeMinutes,
@@ -161,6 +164,8 @@ export const createAlarm = async (req, res) => {
               priority: alarm.priority,
               status: alarm.status,
               breach: alarm.breach,
+               siteName: site.name,
+              vehicleId: patrolRun.vehicleId,
               createdAt: alarm.createdAt,
               guardIds: alarm.guardIds,
             },
@@ -355,8 +360,10 @@ const guardAssignment = guard?.AlarmGuards;
         priority: alarm.priority,
         patrolRunId: alarm.patrolRunId,
         patrolId: alarm.patrolId,
+        vehicleId: alarm.vehicleId || null,
         siteId: alarm.siteId,
-        siteName: alarm.site?.name || null,
+        siteName: alarm.siteName || null,
+        siteAddress: alarm.siteAddress || null,
         specificLocation: alarm.specificLocation,
         etaMinutes: alarm.etaMinutes,
         slaTimeMinutes: alarm.slaTimeMinutes,
@@ -399,10 +406,15 @@ const guardAssignment = guard?.AlarmGuards;
     });
   }
 };
+
 export const getAlarmDetailsForGuard = async (req, res) => {
   try {
     const { alarmId } = req.params;
     const guardId = req.user.id;
+
+    /* =====================================================
+       🔎 VERIFY ALARM IS ASSIGNED TO THIS GUARD
+    ===================================================== */
 
     const alarmGuard = await AlarmGuards.findOne({
       where: {
@@ -412,6 +424,27 @@ export const getAlarmDetailsForGuard = async (req, res) => {
       include: [
         {
           model: Alarm,
+          as: "alarm",
+          include: [
+            {
+              model: PatrolSite,
+              as: "site",
+              attributes: ["id", "name"],
+            },
+            {
+              model: PatrolRun,
+              as: "patrolRun",
+              attributes: ["id", "patrolId", "vehicleId", "status"],
+            },
+            {
+              model: User,
+              as: "guards",
+              attributes: ["id", "name", "email"],
+              through: {
+                attributes: ["status", "createdAt"],
+              },
+            },
+          ],
         },
       ],
     });
@@ -423,28 +456,65 @@ export const getAlarmDetailsForGuard = async (req, res) => {
       });
     }
 
-    const alarm = alarmGuard.Alarm;
+    const alarm = alarmGuard.alarm;
+
+    /* =====================================================
+       🧠 FORMAT GUARDS
+    ===================================================== */
+
+    const guards = alarm.guards.map((guard) => ({
+      id: guard.id,
+      name: guard.name,
+      email: guard.email,
+      status: guard.AlarmGuards.status,
+      assignedAt: guard.AlarmGuards.createdAt,
+    }));
+
+    /* =====================================================
+       📤 RESPONSE
+    ===================================================== */
 
     return res.status(200).json({
       success: true,
       type: "alarm_details",
       data: {
-        alarmId: alarm.id,
+        id: alarm.id,
         title: alarm.title,
         description: alarm.description,
         alarmType: alarm.alarmType,
         priority: alarm.priority,
+        siteId: alarm?.siteId || null,
         siteName: alarm.siteName,
+        siteAddress: alarm.siteAddress,
+        patrolRunId: alarm.patrolRun.id,
+        patrolId: alarm.patrolRun.patrolId,
+        vehicleId: alarm.patrolRun.vehicleId,
+        status: alarm.patrolRun.status,
+
         specificLocation: alarm.specificLocation,
+
         etaMinutes: alarm.etaMinutes,
         slaTimeMinutes: alarm.slaTimeMinutes,
+        totalTimeMinutes: alarm.totalTimeMinutes,
+
         unitPrice: alarm.unitPrice,
         price: alarm.price,
-        status: alarmGuard.status,
+
+        alarmStatus: alarm.status,
+        guardAssignmentStatus: alarmGuard.status,
+
+        breach: alarm.breach,
+        billed: alarm.billed,
+
         createdAt: alarm.createdAt,
+        resolvedAt: alarm.resolvedAt,
+
+        guards,
       },
     });
   } catch (error) {
+    console.error("GET ALARM DETAILS ERROR:", error);
+
     return res.status(500).json({
       success: false,
       message: error.message,

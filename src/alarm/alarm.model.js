@@ -66,6 +66,20 @@ const Alarm = sequelize.define(
         key: "id",
       },
     },
+    siteName: {
+  type: DataTypes.STRING,
+  allowNull: true,
+},
+
+siteAddress: {
+  type: DataTypes.STRING,
+  allowNull: true,
+},
+
+vehicleId: {
+  type: DataTypes.UUID,
+  allowNull: true,
+},
 
     specificLocation: {
       type: DataTypes.STRING,
