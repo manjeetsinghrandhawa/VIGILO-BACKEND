@@ -5,6 +5,7 @@ import ErrorHandler from "../../utils/errorHandler.js";
 import AlarmGuards from "./alarmGuards.model.js";
 import PatrolSite from "../patrolling/patrolSite.model.js";
 import PatrolRun from "../patrolling/patrolRun.model.js";
+import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
 // import catchAsyncError from "../middlewares/catchAsyncError.js";
 
 import sequelize from "../../config/database.js";
@@ -528,12 +529,40 @@ export const respondToAlarm = async (req, res) => {
     const { action } = req.body;
     const guardId = req.user.id;
 
+    /* =====================================================
+       🔎 VALIDATION
+    ===================================================== */
+
     if (!["accept", "reject"].includes(action)) {
       return res.status(400).json({
         success: false,
         message: "Action must be accept or reject",
       });
     }
+
+    /* =====================================================
+       🔎 FETCH ALARM
+    ===================================================== */
+
+    const alarm = await Alarm.findByPk(alarmId);
+
+    if (!alarm) {
+      return res.status(404).json({
+        success: false,
+        message: "Alarm not found",
+      });
+    }
+
+    if (alarm.status !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Only pending alarms can be responded",
+      });
+    }
+
+    /* =====================================================
+       🔎 FETCH ALARM GUARD
+    ===================================================== */
 
     const alarmGuard = await AlarmGuards.findOne({
       where: { alarmId, guardId },
@@ -542,7 +571,7 @@ export const respondToAlarm = async (req, res) => {
     if (!alarmGuard) {
       return res.status(404).json({
         success: false,
-        message: "Alarm not found",
+        message: "Alarm assignment not found for this guard",
       });
     }
 
@@ -553,14 +582,81 @@ export const respondToAlarm = async (req, res) => {
       });
     }
 
-    alarmGuard.status = action === "accept" ? "accepted" : "rejected";
-    await alarmGuard.save();
+    /* =====================================================
+       🔎 FETCH GUARD DETAILS
+    ===================================================== */
 
-    return res.status(200).json({
-      success: true,
-      message: `Alarm ${action}ed successfully`,
-    });
+    const guard = await User.findByPk(guardId);
+
+    if (!guard) {
+      return res.status(404).json({
+        success: false,
+        message: "Guard not found",
+      });
+    }
+
+    /* =====================================================
+       ✅ ACCEPT ALARM
+    ===================================================== */
+
+    if (action === "accept") {
+      alarm.status = "ongoing";
+      alarmGuard.status = "ongoing";
+
+      await alarm.save();
+      await alarmGuard.save();
+
+      await notifyGuardAndAdmin({
+        guardId,
+        alarmId: alarm.id,
+        status: "ALARM_ACCEPTED",
+        type: "ALARM",
+        guardMessage: `You accepted alarm "${alarm.title}"`,
+        adminMessage: `Guard accepted alarm "${alarm.title}"`,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Alarm accepted successfully",
+        data: {
+          alarm,
+          guard,
+        },
+      });
+    }
+
+    /* =====================================================
+       ❌ REJECT ALARM
+    ===================================================== */
+
+    if (action === "reject") {
+      alarm.status = "rejected";
+      alarmGuard.status = "rejected";
+
+      await alarm.save();
+      await alarmGuard.save();
+
+      await notifyGuardAndAdmin({
+        guardId,
+        alarmId: alarm.id,
+        status: "ALARM_REJECTED",
+        type: "ALARM",
+        guardMessage: `You rejected alarm "${alarm.title}"`,
+        adminMessage: `Guard rejected alarm "${alarm.title}"`,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Alarm rejected successfully",
+        data: {
+          alarm,
+          guard,
+        },
+      });
+    }
   } catch (error) {
+    console.error(error);
+
     return res.status(500).json({
       success: false,
       message: error.message,

@@ -150,9 +150,10 @@ vehicleId: {
         "not_respond",
         "absent",
         "delayed",
-        "no_response"
+        "no_response",
+        "rejected"
       ),
-      defaultValue: "active",
+      defaultValue: "pending",
     },
 
     resolvedAt: {
