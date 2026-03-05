@@ -130,7 +130,13 @@ const Alarm = sequelize.define(
         "in_progress",
         "resolved",
         "cancelled",
-        "pending"
+        "pending",
+        "ongoing",
+        "completed",
+        "not_respond",
+        "absent",
+        "delayed",
+        "no_response"
       ),
       defaultValue: "active",
     },

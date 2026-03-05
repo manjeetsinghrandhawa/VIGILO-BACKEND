@@ -40,7 +40,13 @@ const AlarmGuards = sequelize.define(
         "on_the_way",
         "arrived",
         "resolved",
-        "cancelled"
+        "cancelled",
+        "ongoing",
+        "completed",
+        "not_respond",
+        "absent",
+        "delayed",
+        "no_response"
       ),
       defaultValue: "pending",
     },

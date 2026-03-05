@@ -224,57 +224,181 @@ export const createAlarm = async (req, res) => {
   }
 };
 
-export const getNewAlarmsForGuard = async (req, res) => {
+export const getMyAlarms = async (req, res) => {
   try {
-    const guardId = req.user.id; // from JWT middleware
+    const guardId = req.user?.id;
 
-    const alarmGuards = await AlarmGuards.findAll({
-      where: {
-        guardId,
-        status: "pending", // only new alarms
-      },
-      include: [
-        {
-          model: Alarm,
-        },
-      ],
-      order: [["createdAt", "DESC"]],
-    });
-
-    if (!alarmGuards.length) {
-      return res.status(200).json({
-        success: true,
-        message: "No new alarms",
-        data: [],
+    if (!guardId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized access",
       });
     }
 
-    const alarms = alarmGuards.map((ag) => ({
-      alarmId: ag.Alarm.id,
-      title: ag.Alarm.title,
-      description: ag.Alarm.description,
-      priority: ag.Alarm.priority,
-      siteName: ag.Alarm.siteName,
-      specificLocation: ag.Alarm.specificLocation,
-      etaMinutes: ag.Alarm.etaMinutes,
-      slaTimeMinutes: ag.Alarm.slaTimeMinutes,
-      status: ag.status,
-      createdAt: ag.Alarm.createdAt,
-    }));
+    let { page = 1, limit = 20, filter = "pending" } = req.query;
+
+    page = parseInt(page);
+    limit = parseInt(limit);
+
+    if (isNaN(page) || page < 1) page = 1;
+    if (isNaN(limit) || limit < 1) limit = 20;
+
+    const offset = (page - 1) * limit;
+
+    /* =====================================================
+       🔥 VALID FILTER CHECK
+    ===================================================== */
+
+    const allowedFilters = [
+      "pending",
+      "ongoing",
+      "completed",
+      "cancelled",
+      "not_respond",
+      "absent",
+      "delayed",
+    ];
+
+    if (!allowedFilters.includes(filter)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid filter value",
+      });
+    }
+
+    /* =====================================================
+       🔥 MAP FILTER TO ALARM STATUS
+    ===================================================== */
+
+    let alarmStatusWhere = {};
+
+    if (filter === "pending") alarmStatusWhere.status = "pending";
+    if (filter === "ongoing") alarmStatusWhere.status = "ongoing";
+    if (filter === "completed") alarmStatusWhere.status = "completed";
+    if (filter === "cancelled") alarmStatusWhere.status = "cancelled";
+    if (filter === "not_respond") alarmStatusWhere.status = "not_respond";
+    if (filter === "absent") alarmStatusWhere.status = "absent";
+    if (filter === "delayed") alarmStatusWhere.status = "delayed";
+
+    /* =====================================================
+       🔥 FETCH ALARMS
+    ===================================================== */
+
+    const { count, rows } = await Alarm.findAndCountAll({
+  where: alarmStatusWhere,
+  include: [
+    {
+      model: User,
+      as: "guards",
+      where: { id: guardId },
+      attributes: ["id", "name", "email"],
+      required: true,
+      through: {
+        attributes: ["status", "createdAt"],
+      },
+    },
+    {
+      model: PatrolRun,
+      as: "patrolRun",
+      attributes: ["id", "patrolId", "vehicleId"],
+    },
+    {
+      model: PatrolSite,
+      as: "site",
+      attributes: ["id", "name"],
+    },
+  ],
+  order: [["createdAt", "DESC"]],
+  limit,
+  offset,
+});
+
+    /* =====================================================
+       🔥 COUNTS FOR ALL TABS
+    ===================================================== */
+
+    const countByStatus = async (status) => {
+  return Alarm.count({
+    where: { status },
+    include: [
+      {
+        model: User,
+        as: "guards",
+        where: { id: guardId },
+        required: true,
+      },
+    ],
+  });
+};
+
+    const pendingCount = await countByStatus("pending");
+    const ongoingCount = await countByStatus("ongoing");
+    const completedCount = await countByStatus("completed");
+    const cancelledCount = await countByStatus("cancelled");
+    const notRespondCount = await countByStatus("not_respond");
+    const absentCount = await countByStatus("absent");
+    const delayedCount = await countByStatus("delayed");
+
+    /* =====================================================
+       🔥 FORMAT RESPONSE
+    ===================================================== */
+
+    const alarms = rows.map((alarm) => {
+      const guard = alarm.guards?.[0];
+const guardAssignment = guard?.AlarmGuards;
+
+      return {
+        id: alarm.id,
+        title: alarm.title,
+        description: alarm.description,
+        alarmType: alarm.alarmType,
+        priority: alarm.priority,
+        patrolRunId: alarm.patrolRunId,
+        patrolId: alarm.patrolId,
+        siteId: alarm.siteId,
+        siteName: alarm.site?.name || null,
+        specificLocation: alarm.specificLocation,
+        etaMinutes: alarm.etaMinutes,
+        slaTimeMinutes: alarm.slaTimeMinutes,
+        totalTimeMinutes: alarm.totalTimeMinutes,
+        unitPrice: alarm.unitPrice,
+        price: alarm.price,
+        status: alarm.status,
+        breach: alarm.breach,
+        createdAt: alarm.createdAt,
+        guardAssignmentStatus: guardAssignment?.status || null,
+        assignedAt: guardAssignment?.createdAt || null,
+      };
+    });
 
     return res.status(200).json({
       success: true,
-      type: "alarm_popup",
+      filter,
+      counts: {
+        pending: pendingCount,
+        ongoing: ongoingCount,
+        completed: completedCount,
+        cancelled: cancelledCount,
+        not_respond: notRespondCount,
+        absent: absentCount,
+        delayed: delayedCount,
+      },
       data: alarms,
+      pagination: {
+        total: count,
+        page,
+        totalPages: Math.ceil(count / limit),
+        limit,
+      },
     });
   } catch (error) {
+    console.error("GET MY ALARMS ERROR:", error);
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: "Internal server error",
     });
   }
 };
-
 export const getAlarmDetailsForGuard = async (req, res) => {
   try {
     const { alarmId } = req.params;
