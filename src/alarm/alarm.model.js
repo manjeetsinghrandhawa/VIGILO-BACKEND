@@ -51,6 +51,11 @@ const Alarm = sequelize.define(
   },
   onDelete: "SET NULL",
 },
+// ✅ BUSINESS PATROL ID (stored for quick filtering)
+    patrolId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
 
     // ✅ SITE REFERENCE (FOREIGN KEY)
     siteId: {
@@ -141,10 +146,7 @@ const Alarm = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },
-    totalTimeMinutes: {
-  type: DataTypes.INTEGER,
-  allowNull: true,
-},
+    
 
 breach: {
   type: DataTypes.BOOLEAN,
