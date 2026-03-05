@@ -71,6 +71,10 @@ const Alarm = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    guardIds: {
+      type: DataTypes.JSON,
+      allowNull: true,
+    },
 
     // Guard Assignment
     assignedGuardId: {
@@ -95,7 +99,7 @@ const Alarm = sequelize.define(
     },
     totalTimeMinutes: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       validate: {
         min: 0,
       },
