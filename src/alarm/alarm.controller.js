@@ -663,3 +663,155 @@ export const respondToAlarm = async (req, res) => {
     });
   }
 };
+
+
+export const completeAlarm = async (req, res) => {
+  try {
+    const { alarmId } = req.params;
+    const guardId = req.user.id;
+
+    /* ===============================================
+       FETCH ALARM
+    =============================================== */
+
+    const alarm = await Alarm.findByPk(alarmId);
+
+    if (!alarm) {
+      return res.status(404).json({
+        success: false,
+        message: "Alarm not found",
+      });
+    }
+
+    if (alarm.status !== "ongoing" || alarm.status ==="delayed") {
+      return res.status(400).json({
+        success: false,
+        message: "Only ongoing or delayed alarms can be completed",
+      });
+    }
+
+    /* ===============================================
+       FETCH GUARD ASSIGNMENT
+    =============================================== */
+
+    const alarmGuard = await AlarmGuards.findOne({
+      where: {
+        alarmId,
+        guardId,
+      },
+    });
+
+    if (!alarmGuard) {
+      return res.status(404).json({
+        success: false,
+        message: "Guard assignment not found",
+      });
+    }
+
+    if (alarmGuard.status !== "ongoing" && alarmGuard.status !== "delayed") {
+      return res.status(400).json({
+        success: false,
+        message: "Alarm not accepted by this guard",
+      });
+    }
+
+    /* ===============================================
+       CALCULATE TIME
+    =============================================== */
+
+    const createdAt = new Date(alarm.createdAt);
+    const now = new Date();
+
+    const diffMinutes = Math.floor(
+      (now - createdAt) / (1000 * 60)
+    );
+
+    const allowedTime = alarm.totalTimeMinutes;
+
+    let finalStatus = "completed";
+
+    if (diffMinutes > allowedTime) {
+      finalStatus = "delayed";
+    }
+
+    /* ===============================================
+       UPDATE ALARM
+    =============================================== */
+
+    alarm.status = finalStatus;
+    alarm.resolvedAt = now;
+
+    // ✅ mark SLA breach
+if (finalStatus === "delayed") {
+  alarm.breach = true;
+}
+
+    await alarm.save();
+
+    /* ===============================================
+       UPDATE ALARM GUARD
+    =============================================== */
+
+    alarmGuard.status = finalStatus;
+    alarmGuard.completedAt = now;
+
+    await alarmGuard.save();
+
+    /* ===============================================
+       FETCH GUARD DETAILS
+    =============================================== */
+
+    const guard = await User.findByPk(guardId, {
+      attributes: ["id", "name", "email"],
+    });
+
+    /* ===============================================
+       SEND NOTIFICATION
+    =============================================== */
+
+    await notifyGuardAndAdmin({
+      guardId,
+      alarmId: alarm.id,
+      status:
+        finalStatus === "completed"
+          ? "ALARM_COMPLETED"
+          : "ALARM_DELAYED",
+      type: "ALARM",
+      guardMessage:
+        finalStatus === "completed"
+          ? `Alarm "${alarm.title}" completed successfully`
+          : `Alarm "${alarm.title}" completed but SLA breached`,
+      adminMessage:
+        finalStatus === "completed"
+          ? `Guard completed alarm "${alarm.title}"`
+          : `Guard completed alarm "${alarm.title}" but SLA breached`,
+    });
+
+    /* ===============================================
+       RESPONSE
+    =============================================== */
+
+    return res.status(200).json({
+      success: true,
+      message:
+        finalStatus === "completed"
+          ? "Alarm completed successfully"
+          : "Alarm completed but SLA time exceeded",
+      data: {
+        alarm,
+        guard,
+        completedAt: alarmGuard.completedAt,
+        timeTakenMinutes: diffMinutes,
+        allowedTimeMinutes: allowedTime,
+        status: finalStatus,
+      },
+    });
+  } catch (error) {
+    console.error("COMPLETE ALARM ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
