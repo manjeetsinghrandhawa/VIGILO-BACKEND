@@ -860,3 +860,44 @@ export const getAllAlarms = async (req, res) => {
     });
   }
 };
+
+export const deleteAlarm = async (req, res) => {
+  try {
+    const { alarmId } = req.params;
+
+    if (!alarmId) {
+      return res.status(400).json({
+        success: false,
+        message: "alarmId is required",
+      });
+    }
+
+    const alarm = await Alarm.findByPk(alarmId);
+
+    if (!alarm) {
+      return res.status(404).json({
+        success: false,
+        message: "Alarm not found",
+      });
+    }
+
+    // Soft delete
+    await alarm.destroy();
+
+    return res.status(200).json({
+      success: true,
+      message: "Alarm deleted successfully",
+      data: {
+        alarmId: alarm.id,
+        title: alarm.title,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

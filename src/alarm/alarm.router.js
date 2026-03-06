@@ -4,7 +4,8 @@ import { createAlarm,
     getAlarmDetailsForGuard,
     respondToAlarm,
     completeAlarm,
-    getAllAlarms
+    getAllAlarms,
+    deleteAlarm
  } from "./alarm.controller.js";
 import { auth, isGaurd, isAdmin } from "../../middlewares/auth.js";
 
@@ -15,6 +16,7 @@ router.get("/getMyAlarms", auth, isGaurd, getMyAlarms);
 router.get("/getAlarmDetailsForGuard/:alarmId", auth, isGaurd, getAlarmDetailsForGuard);
 router.post("/respondToAlarm/:alarmId", auth, isGaurd, respondToAlarm);
 router.post("/completeAlarm", auth, isGaurd, completeAlarm);
-router.get("/getAllAlarms", auth, isAdmin, getAllAlarms)
+router.get("/getAllAlarms", auth, isAdmin, getAllAlarms);
+router.delete("/deleteAlarm/:alarmId", auth, isAdmin, deleteAlarm);
 
 export default router;
