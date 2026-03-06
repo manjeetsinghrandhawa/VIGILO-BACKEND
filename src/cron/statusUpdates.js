@@ -8,6 +8,7 @@ import { getTimeZone } from "../../utils/timeZone.js";
 import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
 import { notifyAdminOnly } from "../../utils/notifyAdminOnly.helper.js";
 import PatrolRun from "../patrolling/patrolRun.model.js";
+import Alarm from "../alarm/alarm.model.js";
 
 
 
@@ -342,6 +343,89 @@ for (const patrolRun of patrolRuns) {
       `⏳ PatrolRun ${patrolRun.id} marked DELAYED`
     );
   }
+}
+
+/**
+ * ===============================
+ * 🚨 ALARM STATUS CRON
+ * ===============================
+ */
+
+const alarms = await Alarm.findAll({
+  where: {
+    status: {
+      [Op.in]: ["pending", "ongoing"],
+    },
+  },
+  limit: 50,
+});
+
+for (const alarm of alarms) {
+
+  const createdAt = moment(alarm.createdAt).tz(tz);
+
+  const etaEnd = createdAt.clone().add(alarm.etaMinutes || 0, "minutes");
+
+  const slaEnd = createdAt.clone().add(
+    (alarm.etaMinutes || 0) + alarm.slaTimeMinutes,
+    "minutes"
+  );
+
+  const graceEnd = slaEnd.clone().add(30, "minutes");
+
+  /**
+   * 🔴 CASE 1
+   * pending → ETA passed
+   * → CANCELLED
+   */
+
+  if (
+    alarm.status === "pending" &&
+    now.isAfter(etaEnd)
+  ) {
+
+    await alarm.update({ status: "cancelled" });
+
+    console.log(`🚨 Alarm ${alarm.id} cancelled (ETA missed)`);
+
+    continue;
+  }
+
+  /**
+   * 🟡 CASE 2
+   * ongoing → SLA passed
+   * → waiting for grace
+   */
+
+  if (
+    alarm.status === "ongoing" &&
+    now.isAfter(slaEnd) &&
+    now.isBefore(graceEnd)
+  ) {
+
+    console.log(`⏳ Alarm ${alarm.id} waiting grace period`);
+
+    continue;
+  }
+
+  /**
+   * 🔴 CASE 3
+   * ongoing → SLA + grace passed
+   * → ABSENT
+   */
+
+  if (
+    alarm.status === "ongoing" &&
+    now.isAfter(graceEnd)
+  ) {
+
+    await alarm.update({ status: "absent" });
+
+    console.log(`🚨 Alarm ${alarm.id} marked ABSENT`);
+
+    continue;
+  }
+
 }
   } catch (error) {
     console.error("ABSENT CRON ERROR:", error);
