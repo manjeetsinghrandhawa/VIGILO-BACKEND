@@ -815,3 +815,48 @@ if (finalStatus === "delayed") {
     });
   }
 };
+
+export const getAllAlarms = async (req, res) => {
+  try {
+
+    const alarms = await Alarm.findAll({
+      order: [["createdAt", "DESC"]],
+
+      include: [
+    {
+      model: User,
+      as: "guards",
+      attributes: ["id", "name", "email"],
+      through: {
+        attributes: [
+          "id",
+          "status",
+          "assignedAt",
+          "arrivedAt",
+          "completedAt",
+          "alarmId",
+          "guardId",
+          "assignedAt",
+          "completedAt"
+
+        ],
+      },
+    },
+  ],
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: alarms.length,
+      data: alarms,
+    });
+
+  } catch (error) {
+    console.error("GET ALL ALARMS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
