@@ -385,6 +385,7 @@ for (const alarm of alarms) {
   ) {
 
     await alarm.update({ status: "cancelled" });
+    await alarm.update({breach:true});
 
     console.log(`🚨 Alarm ${alarm.id} cancelled (ETA missed)`);
 
@@ -420,6 +421,7 @@ for (const alarm of alarms) {
   ) {
 
     await alarm.update({ status: "absent" });
+    await alarm.update({breach:true});
 
     console.log(`🚨 Alarm ${alarm.id} marked ABSENT`);
 
