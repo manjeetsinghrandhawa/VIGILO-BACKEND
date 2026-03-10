@@ -1059,6 +1059,7 @@ export const getPatrolSiteDetails = async (req, res, next) => {
     return res.status(StatusCodes.OK).json({
       success: true,
       data: {
+        site,
         site: {
           id: site.id,
           name: site.name,
@@ -1067,6 +1068,8 @@ export const getPatrolSiteDetails = async (req, res, next) => {
           longitude: site.longitude,
           description: site.description,
           status: site.status,
+          subSites: site.subSites,
+        checkpoints: site.checkpoints, // site-level checkpoints
         },
 
         summary: {
