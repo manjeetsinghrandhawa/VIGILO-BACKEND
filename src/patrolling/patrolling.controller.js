@@ -1182,6 +1182,13 @@ export const getPatrolSubSiteDetails = async (req, res, next) => {
           latitude: foundSubSite.latitude,
           longitude: foundSubSite.longitude,
           status: foundSubSite.status,
+          parentSite: foundSubSite.parentSite,
+           summary: {
+          totalCheckpoints,
+          completedCheckpoints,
+          pendingCheckpoints,
+        },
+        checkpoints: foundSubSite.checkpoints,
         },
 
         parentSite: foundSubSite.parentSite,
