@@ -1059,7 +1059,16 @@ export const getPatrolSiteDetails = async (req, res, next) => {
     return res.status(StatusCodes.OK).json({
       success: true,
       data: {
-        site,
+        site:{
+          site,
+          summary: {
+          totalSubSites,
+          totalCheckpoints,
+          completedCheckpoints,
+          pendingCheckpoints:
+            totalCheckpoints - completedCheckpoints,
+        },
+        },
         site: {
           id: site.id,
           name: site.name,
