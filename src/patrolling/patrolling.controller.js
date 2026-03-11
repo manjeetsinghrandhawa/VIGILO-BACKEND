@@ -1594,7 +1594,7 @@ export const scanCheckpoint = async (req, res, next) => {
       const patrolRuns = await PatrolRun.findAll({
         where: {
           id: runIds,
-          status: ["pending", "ongoing"],
+          status: ["pending", "ongoing","upcoming"],
         },
       });
 
