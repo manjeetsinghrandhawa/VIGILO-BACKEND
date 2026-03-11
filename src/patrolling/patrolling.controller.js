@@ -427,6 +427,7 @@ if (subSiteId) {
     const qrPayload = JSON.stringify({
       checkPointId: checkpoint.id,
       latitude,
+      name,
       longitude,
     });
 
@@ -451,6 +452,7 @@ if (subSiteId) {
         checkPointId: checkpoint.id,
         latitude,
         longitude,
+        name,
         qrUrl: s3Result.Location,
       },
       { transaction }
