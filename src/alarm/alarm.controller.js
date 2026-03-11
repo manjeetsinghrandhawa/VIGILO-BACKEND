@@ -25,6 +25,8 @@ export const createAlarm = async (req, res) => {
       guardIds,
       etaMinutes,
       slaTimeMinutes,
+      monitoringCompany,
+      license,
       unitPrice,
       price,
     } = req.body;
@@ -33,11 +35,11 @@ export const createAlarm = async (req, res) => {
        🔎 BASIC VALIDATIONS
     ===================================================== */
 
-    if (!title || !alarmType || !priority || !siteId) {
+    if (!title || !alarmType || !priority || !siteId || !monitoringCompany || !license) {
       return res.status(400).json({
         success: false,
         message:
-          "title, alarmType, priority and siteId are required fields",
+          "title, alarmType, priority, siteId, monitoringCompany and license are required fields",
       });
     }
 
@@ -139,6 +141,8 @@ export const createAlarm = async (req, res) => {
         etaMinutes,
         slaTimeMinutes,
         totalTimeMinutes,
+        monitoringCompany,
+        license,
         unitPrice,
         price,
         guardIds,
@@ -169,6 +173,9 @@ export const createAlarm = async (req, res) => {
               vehicleId: patrolRun.vehicleId,
               createdAt: alarm.createdAt,
               guardIds: alarm.guardIds,
+              monitoringCompany: alarm.monitoringCompany,
+              license: alarm.license,
+
             },
           ],
         };

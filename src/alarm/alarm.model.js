@@ -172,6 +172,14 @@ vehicleId: {
       defaultValue: false,
     },
     
+    monitoringCompany:{
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    license:{
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
 
 breach: {
   type: DataTypes.BOOLEAN,
