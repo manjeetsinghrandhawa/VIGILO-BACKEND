@@ -46,6 +46,10 @@ const PatrolGuards = sequelize.define(
         "active",
         "completed",
         "ended",
+        "cancelled",
+        "delayed",
+        "absent",
+         "ended_early",
         "missed",
         "overtime_started",
         "overtime_ended"

@@ -301,8 +301,8 @@ export const respondToShift = async (req, res, next) => {
     guardResponse: staticGuard.status,
     guardId: userId,
     guardName: guard?.name,
-    startDateTime: shift.startDateTime,
-    endDateTime: shift.endDateTime,
+    startDateTime: shift.startTime,
+endDateTime: shift.endTime,
   },
 });
 

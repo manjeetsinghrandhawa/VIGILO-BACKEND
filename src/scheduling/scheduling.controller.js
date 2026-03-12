@@ -1471,13 +1471,15 @@ const getShiftDuration = (start, end) => {
 // CLOCK-IN
 export const clockIn = async (req, res, next) => {
   try {
-    const { staticId, guardId, type } = req.body;
+    const { staticId, patrolRunId, guardId, type } = req.body;
 
-    if (!staticId || !guardId || !type) {
-      return next(
-        new ErrorHandler("staticId, guardId and type are required", 400)
-      );
-    }
+const shiftId = type === "static" ? staticId : patrolRunId;
+
+if (!shiftId || !guardId || !type) {
+  return next(
+    new ErrorHandler("shiftId, guardId and type are required", 400)
+  );
+}
 
     const isStatic = type === "static";
     const ShiftModel = isStatic ? Static : PatrolRun;
@@ -1491,17 +1493,27 @@ const activeShift = await ShiftGuardModel.findOne({
     {
       model: ShiftModel,
       as: shiftAlias,
-      attributes: [
-        "id",
-        "orderId",
-        "type",
-        "description",
-        "startTime",
-        "endTime",
-        "status",
-        "shiftTotalHours",
-        "createdAt",
-      ],
+      attributes: isStatic
+  ? [
+      "id",
+      "orderId",
+      "type",
+      "description",
+      "startTime",
+      "endTime",
+      "status",
+      "shiftTotalHours",
+      "createdAt",
+    ]
+  : [
+      "id",
+      "orderId",
+      "notes",
+      "startDateTime",
+      "estimatedCompletion",
+      "status",
+      "createdAt",
+    ],
       include: [
         {
           model: Order,
@@ -1515,8 +1527,24 @@ const activeShift = await ShiftGuardModel.findOne({
 
 if (activeShift) {
   const shift = activeShift[shiftAlias];
-  const shiftStart = new Date(shift.startTime);
-  const shiftEnd = new Date(shift.endTime);
+  // 🛑 Safety check
+  if (!shift) {
+    return res.status(400).json({
+      success: false,
+      message: "Active shift found but shift details are missing.",
+      assignmentId: activeShift.id,
+      shiftId: shift.id,
+      shiftType: type,
+      orderId: shift.orderId,
+    });
+  }
+  const shiftStart = new Date(
+  isStatic ? shift.startTime : shift.startDateTime
+);
+
+const shiftEnd = new Date(
+  isStatic ? shift.endTime : shift.estimatedCompletion
+);
 
   return res.status(400).json({
     success: false,
@@ -1548,7 +1576,7 @@ if (activeShift) {
         : null,
 
       // 📝 Extra context
-      description: shift.description,
+      description: isStatic ? shift.description : shift.notes,
       createdAt: shift.createdAt,
     },
   });
@@ -1557,7 +1585,10 @@ if (activeShift) {
 
     // Fetch assignment
     const assignment = await ShiftGuardModel.findOne({
-      where: { staticId, guardId },
+      where: {
+  [isStatic ? "staticId" : "patrolRunId"]: shiftId,
+  guardId,
+},
       include: [{ model: ShiftModel, as: shiftAlias }],
     });
 
@@ -1583,8 +1614,13 @@ if (activeShift) {
     }
 
     const now = new Date();
-    const shiftStart = new Date(shift.startTime);
-    const shiftEnd = new Date(shift.endTime);
+    const shiftStart = new Date(
+  isStatic ? shift.startTime : shift.startDateTime
+);
+
+const shiftEnd = new Date(
+  isStatic ? shift.endTime : shift.estimatedCompletion
+);
 
     const oneHourBeforeStart = new Date(shiftStart.getTime() - 60 * 60 * 1000);
     const oneHourAfterEnd = new Date(shiftEnd.getTime() + 60 * 60 * 1000);
@@ -1678,7 +1714,9 @@ if (now > shiftEnd && now <= oneHourAfterEnd) {
         {
           model: ShiftModel,
           as: shiftAlias,
-          where: { startTime: shiftEnd },
+          where: {
+  [isStatic ? "startTime" : "startDateTime"]: shiftEnd,
+},
         },
       ],
     });
@@ -1708,7 +1746,7 @@ if (now > shiftStart) {
 
   await notifyGuardAndAdmin({
     guardId,
-    shiftId: staticId,
+    shiftId: shiftId,
     status: "CLOCK_IN_LATE",
     type: "CLOCK_IN",
     guardMessage: `You clocked in late by ${lateMinutes} minutes.`,
@@ -1717,7 +1755,7 @@ if (now > shiftStart) {
 } else {
   await notifyGuardAndAdmin({
     guardId,
-    shiftId: staticId,
+    shiftId: shiftId,
     status: "CLOCK_IN_SUCCESS",
     type: "CLOCK_IN",
     guardMessage: `You clocked in successfully at ${formatTime(now)}.`,
@@ -1731,7 +1769,7 @@ if (now > shiftStart) {
       message: `Clock-In successful at ${formatTime(now)}`,
       warnings,
       data: {
-        shiftId: staticId,
+        shiftId: shiftId,
         guardId,
         shiftType: type,
         shiftDate: formatDate(shiftStart),
