@@ -298,7 +298,7 @@ if (
 const patrolRuns = await PatrolRun.findAll({
   where: {
     status: {
-      [Op.in]: ["pending", "upcoming", "ongoing"],
+      [Op.in]: ["pending", "upcoming", "ongoing","delayed"],
     },
   },
 });
@@ -342,6 +342,24 @@ for (const patrolRun of patrolRuns) {
     console.log(
       `⏳ PatrolRun ${patrolRun.id} marked DELAYED`
     );
+  continue;
+  }
+
+  /**
+   * 🔴 CASE 4
+   * delayed → 30 minutes after estimatedCompletion
+   * → mark ABSENT
+   */
+  if (patrolRun.status === "delayed") {
+    const delayedLimit = estimatedEnd.clone().add(30, "minutes");
+
+    if (now.isAfter(delayedLimit)) {
+      await patrolRun.update({ status: "absent" });
+
+      console.log(
+        `🚨 PatrolRun ${patrolRun.id} marked ABSENT (30 min after delayed)`
+      );
+    }
   }
 }
 

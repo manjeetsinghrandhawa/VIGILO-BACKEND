@@ -1480,9 +1480,9 @@ export const clockIn = async (req, res, next) => {
     }
 
     const isStatic = type === "static";
-    const ShiftModel = isStatic ? Static : Patrol;
+    const ShiftModel = isStatic ? Static : PatrolRun;
     const ShiftGuardModel = isStatic ? StaticGuards : PatrolGuards;
-    const shiftAlias = isStatic ? "static" : "patrol";
+    const shiftAlias = isStatic ? "static" : "patrolRun";
 
     // 🚫 Guard already in an active shift
 const activeShift = await ShiftGuardModel.findOne({
@@ -2063,6 +2063,323 @@ if (!shift) {
   });
 }
 
+/**
+ * 2️⃣ PATROL ONGOING
+ */
+if (!shift) {
+
+  const patrol = await PatrolRun.findOne({
+    where: {
+      status: "ongoing",
+    },
+    attributes: [
+        "id",
+        "patrolId",
+        "vehicleId",
+        "notes",
+        "status",
+        "startDateTime",
+        "estimatedCompletion",
+        "runStructure",
+        "createdAt",
+        "updatedAt",
+        "totalSites",
+        "completedSites",
+        "totalSubSites",
+        "completedSubSites",
+        "totalCheckpoints",
+        "completedCheckpoints",
+
+      ],
+      include: [
+        {
+          model: Order,
+          as: "order",
+          attributes: [
+            "id",
+            "locationName",
+            "locationAddress",
+            "images",
+            "serviceType",
+            "startDate",
+            "startTime",
+            "status",
+          ],
+          include: [
+            {
+              model: User,
+              as: "user", // client
+              attributes: ["id", "name", "email", "mobile","avatar"],
+            },
+          ],
+        },
+        {
+          model: User,
+          as: "guards",
+          where: { id: guardId }, // REQUIRED
+          required: true,
+          attributes: ["id", "name", "email", "avatar"],
+          through: {
+            attributes: [
+              "status",
+              "clockInTime",
+              "clockOutTime",
+              "overtimeStartTime",
+              "overtimeEndTime",
+              "overtimeHours",
+              "totalHours",
+              "createdAt",
+            ],
+          },
+        },
+      ],
+    order: [["startDateTime", "ASC"]],
+  });
+
+  if (patrol) {
+
+  const guard = patrol.guards.find(g => g.id === guardId);
+  const pivot = guard?.PatrolGuards;
+
+  const clockInTime = pivot?.clockInTime || null;
+  const clockOutTime = pivot?.clockOutTime || null;
+
+  const overtimeStartTime = pivot?.overtimeStartTime || null;
+  const overtimeEndTime = pivot?.overtimeEndTime || null;
+  const overtimeHours = pivot?.overtimeHours || null;
+
+  return res.status(200).json({
+    success: true,
+    type: "patrol",
+    data: {
+
+      patrol: {
+        id: patrol.id,
+        patrolId: patrol.patrolId,
+        vehicleId: patrol.vehicleId,
+        notes: patrol.notes,
+        status: patrol.status,
+
+        startTime: patrol.startDateTime,
+        endTime: patrol.estimatedCompletion,
+
+        totalSites: patrol.totalSites,
+        completedSites: patrol.completedSites,
+
+        totalSubSites: patrol.totalSubSites,
+        completedSubSites: patrol.completedSubSites,
+
+        totalCheckpoints: patrol.totalCheckpoints,
+        completedCheckpoints: patrol.completedCheckpoints,
+
+        runStructure: patrol.runStructure,
+      },
+
+      order: patrol.order || null,
+
+      client: patrol.order?.user || null,
+
+      guards: patrol.guards || [],
+
+      timing: {
+        startTime: patrol.startDateTime,
+        endTime: patrol.estimatedCompletion,
+      },
+
+      attendance: {
+        clockInTime,
+        clockOutTime,
+
+        overtime: {
+          overtimeStartTime,
+          overtimeEndTime,
+          overtimeHours,
+        },
+      },
+
+      progress: {
+        sites: {
+          total: patrol.totalSites,
+          completed: patrol.completedSites,
+        },
+        subSites: {
+          total: patrol.totalSubSites,
+          completed: patrol.completedSubSites,
+        },
+        checkpoints: {
+          total: patrol.totalCheckpoints,
+          completed: patrol.completedCheckpoints,
+        },
+      },
+
+      meta: {
+        createdAt: patrol.createdAt,
+        updatedAt: patrol.updatedAt,
+      },
+    },
+  });
+
+}
+}
+
+/**
+ * 3️⃣ PATROL DELAYED
+ */
+if (!shift) {
+
+  const patrol = await PatrolRun.findOne({
+    where: {
+      status: "delayed",
+    },
+    attributes: [
+        "id",
+        "patrolId",
+        "vehicleId",
+        "notes",
+        "status",
+        "startDateTime",
+        "estimatedCompletion",
+        "runStructure",
+        "createdAt",
+        "updatedAt",
+        "totalSites",
+        "completedSites",
+        "totalSubSites",
+        "completedSubSites",
+        "totalCheckpoints",
+        "completedCheckpoints",
+      ],
+      include: [
+        {
+          model: Order,
+          as: "order",
+          attributes: [
+            "id",
+            "locationName",
+            "locationAddress",
+            "images",
+            "serviceType",
+            "startDate",
+            "startTime",
+            "status",
+          ],
+          include: [
+            {
+              model: User,
+              as: "user", // client
+              attributes: ["id", "name", "email", "mobile","avatar"],
+            },
+          ],
+        },
+        {
+          model: User,
+          as: "guards",
+          where: { id: guardId }, // REQUIRED
+          required: true,
+          attributes: ["id", "name", "email", "avatar"],
+          through: {
+            attributes: [
+              "status",
+              "clockInTime",
+              "clockOutTime",
+              "overtimeStartTime",
+              "overtimeEndTime",
+              "overtimeHours",
+              "totalHours",
+              "createdAt",
+            ],
+          },
+        },
+      ],
+    order: [["startDateTime", "ASC"]],
+  });
+
+  if (patrol) {
+
+  const guard = patrol.guards.find(g => g.id === guardId);
+  const pivot = guard?.PatrolGuards;
+
+  const clockInTime = pivot?.clockInTime || null;
+  const clockOutTime = pivot?.clockOutTime || null;
+
+  const overtimeStartTime = pivot?.overtimeStartTime || null;
+  const overtimeEndTime = pivot?.overtimeEndTime || null;
+  const overtimeHours = pivot?.overtimeHours || null;
+
+  return res.status(200).json({
+    success: true,
+    type: "patrol",
+    data: {
+
+      patrol: {
+        id: patrol.id,
+        patrolId: patrol.patrolId,
+        vehicleId: patrol.vehicleId,
+        notes: patrol.notes,
+        status: patrol.status,
+
+        startTime: patrol.startDateTime,
+        endTime: patrol.estimatedCompletion,
+
+        totalSites: patrol.totalSites,
+        completedSites: patrol.completedSites,
+
+        totalSubSites: patrol.totalSubSites,
+        completedSubSites: patrol.completedSubSites,
+
+        totalCheckpoints: patrol.totalCheckpoints,
+        completedCheckpoints: patrol.completedCheckpoints,
+
+        runStructure: patrol.runStructure,
+      },
+
+      order: patrol.order || null,
+
+      client: patrol.order?.user || null,
+
+      guards: patrol.guards || [],
+
+      timing: {
+        startTime: patrol.startDateTime,
+        endTime: patrol.estimatedCompletion,
+      },
+
+      attendance: {
+        clockInTime,
+        clockOutTime,
+
+        overtime: {
+          overtimeStartTime,
+          overtimeEndTime,
+          overtimeHours,
+        },
+      },
+
+      progress: {
+        sites: {
+          total: patrol.totalSites,
+          completed: patrol.completedSites,
+        },
+        subSites: {
+          total: patrol.totalSubSites,
+          completed: patrol.completedSubSites,
+        },
+        checkpoints: {
+          total: patrol.totalCheckpoints,
+          completed: patrol.completedCheckpoints,
+        },
+      },
+
+      meta: {
+        createdAt: patrol.createdAt,
+        updatedAt: patrol.updatedAt,
+      },
+    },
+  });
+
+}
+}
+
     /**
  * 2️⃣ NEXT UPCOMING shift (nearest future)
  */
@@ -2114,6 +2431,167 @@ if (!shift) {
   });
 }
 
+/**
+ * 6️⃣ PATROL UPCOMING
+ */
+if (!shift) {
+
+  const patrol = await PatrolRun.findOne({
+    where: {
+      status: "upcoming",
+      estimatedCompletion: {
+        [Op.gte]: now.toDate(),
+      },
+    },
+    attributes: [
+        "id",
+        "patrolId",
+        "vehicleId",
+        "notes",
+        "status",
+        "startDateTime",
+        "estimatedCompletion",
+        "runStructure",
+        "createdAt",
+        "updatedAt",
+        "totalSites",
+        "completedSites",
+        "totalSubSites",
+        "completedSubSites",
+        "totalCheckpoints",
+        "completedCheckpoints",
+      ],
+      include: [
+        {
+          model: Order,
+          as: "order",
+          attributes: [
+            "id",
+            "locationName",
+            "locationAddress",
+            "images",
+            "serviceType",
+            "startDate",
+            "startTime",
+            "status",
+          ],
+          include: [
+            {
+              model: User,
+              as: "user", // client
+              attributes: ["id", "name", "email", "mobile","avatar"],
+            },
+          ],
+        },
+        {
+          model: User,
+          as: "guards",
+          where: { id: guardId }, // REQUIRED
+          required: true,
+          attributes: ["id", "name", "email", "avatar"],
+          through: {
+            where: { status: "accepted" },
+            attributes: [
+              "status",
+              "clockInTime",
+              "clockOutTime",
+              "overtimeStartTime",
+              "overtimeEndTime",
+              "overtimeHours",
+              "totalHours",
+              "createdAt",
+            ],
+          },
+        },
+      ],
+    order: [["startDateTime", "ASC"]],
+  });
+
+  if (patrol) {
+
+  const guard = patrol.guards.find(g => g.id === guardId);
+  const pivot = guard?.PatrolGuards;
+
+  const clockInTime = pivot?.clockInTime || null;
+  const clockOutTime = pivot?.clockOutTime || null;
+
+  const overtimeStartTime = pivot?.overtimeStartTime || null;
+  const overtimeEndTime = pivot?.overtimeEndTime || null;
+  const overtimeHours = pivot?.overtimeHours || null;
+
+  return res.status(200).json({
+    success: true,
+    type: "patrol",
+    data: {
+
+      patrol: {
+        id: patrol.id,
+        patrolId: patrol.patrolId,
+        vehicleId: patrol.vehicleId,
+        notes: patrol.notes,
+        status: patrol.status,
+
+        startTime: patrol.startDateTime,
+        endTime: patrol.estimatedCompletion,
+
+        totalSites: patrol.totalSites,
+        completedSites: patrol.completedSites,
+
+        totalSubSites: patrol.totalSubSites,
+        completedSubSites: patrol.completedSubSites,
+
+        totalCheckpoints: patrol.totalCheckpoints,
+        completedCheckpoints: patrol.completedCheckpoints,
+
+        runStructure: patrol.runStructure,
+      },
+
+      order: patrol.order || null,
+
+      client: patrol.order?.user || null,
+
+      guards: patrol.guards || [],
+
+      timing: {
+        startTime: patrol.startDateTime,
+        endTime: patrol.estimatedCompletion,
+      },
+
+      attendance: {
+        clockInTime,
+        clockOutTime,
+
+        overtime: {
+          overtimeStartTime,
+          overtimeEndTime,
+          overtimeHours,
+        },
+      },
+
+      progress: {
+        sites: {
+          total: patrol.totalSites,
+          completed: patrol.completedSites,
+        },
+        subSites: {
+          total: patrol.totalSubSites,
+          completed: patrol.completedSubSites,
+        },
+        checkpoints: {
+          total: patrol.totalCheckpoints,
+          completed: patrol.completedCheckpoints,
+        },
+      },
+
+      meta: {
+        createdAt: patrol.createdAt,
+        updatedAt: patrol.updatedAt,
+      },
+    },
+  });
+
+}
+}
 
     /**
      * 3️⃣ No shift
