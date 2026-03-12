@@ -756,6 +756,7 @@ export const getMyOrdersByDate = async (req, res, next) => {
       serviceType: order.serviceType,
       locationName: order.locationName,
       locationAddress: order.locationAddress,
+      siteService: order.siteService,
       guardsRequired: order.guardsRequired,
       status: order.status,
       description: order.description,

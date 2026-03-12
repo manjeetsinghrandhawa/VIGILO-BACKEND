@@ -602,7 +602,7 @@ export const getProfile = catchAsyncError(async (req, res, next) => {
 });
 
 export const editProfile = catchAsyncError(async (req, res, next) => {
-  const { name, address, mobile, avatar } = req.body;
+  const { name, address, mobile, avatar, countryCode } = req.body;
 
   const user = await userModel.findByPk(req.userId);
   if (!user) {
@@ -613,6 +613,7 @@ export const editProfile = catchAsyncError(async (req, res, next) => {
   if (address) user.address = address;
   if (mobile) user.mobile = mobile;
   if (avatar) user.avatar = avatar;
+  if (countryCode) user.countryCode = countryCode;
   await user.save();
 
   res.status(StatusCodes.OK).json({
