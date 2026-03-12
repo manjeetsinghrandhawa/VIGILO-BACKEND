@@ -726,6 +726,22 @@ export const getMyOrdersByDate = async (req, res, next) => {
               as: "incidents",
               required: false,
             },
+            {
+          model: User,
+          as: "guards",
+          attributes: ["id", "name", "email", "avatar", "mobile"],
+          through: {
+            attributes: [
+              "status",
+              "clockInTime",
+              "clockOutTime",
+              "overtimeStartTime",
+              "overtimeEndTime",
+              "overtimeHours",
+              "totalHours",
+            ],
+          },
+        },
           ],
         },
       ],
@@ -762,6 +778,25 @@ export const getMyOrdersByDate = async (req, res, next) => {
         endTime: shift.endTime,
         createdAt: shift.createdAt,
         shiftTotalHours: shift?.shiftTotalHours || null,
+
+        // 👮 ASSIGNED GUARDS
+  guards: (shift.guards || []).map(guard => ({
+    id: guard.id,
+    name: guard.name,
+    email: guard.email,
+    avatar: guard.avatar,
+    mobile: guard.mobile,
+
+     assignment: {
+      status: guard.StaticGuards?.status,
+      clockInTime: guard.StaticGuards?.clockInTime,
+      clockOutTime: guard.StaticGuards?.clockOutTime,
+      overtimeStartTime: guard.StaticGuards?.overtimeStartTime,
+      overtimeEndTime: guard.StaticGuards?.overtimeEndTime,
+      overtimeHours: guard.StaticGuards?.overtimeHours,
+      totalHours: guard.StaticGuards?.totalHours,
+    },
+  })),
 
         // 👇 INCIDENTS (OPTIONAL)
         incidents: (shift.incidents || []).map(incident => ({
