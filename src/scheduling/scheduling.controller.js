@@ -1797,7 +1797,6 @@ if (now > shiftStart) {
 };
 
 
-
 // CLOCK-OUT completed for both static shifts  and patrol runs (with overtime calculation and detailed responses)
 export const clockOut = async (req, res, next) => {
   try {
