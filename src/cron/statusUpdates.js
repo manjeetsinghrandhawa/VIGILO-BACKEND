@@ -9,6 +9,7 @@ import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
 import { notifyAdminOnly } from "../../utils/notifyAdminOnly.helper.js";
 import PatrolRun from "../patrolling/patrolRun.model.js";
 import Alarm from "../alarm/alarm.model.js";
+import PatrolGuards from "../patrolling/PatrolGuards.model.js";
 
 
 
@@ -320,6 +321,7 @@ for (const patrolRun of patrolRuns) {
     now.isAfter(estimatedEnd)
   ) {
     await patrolRun.update({ status: "absent" });
+    await PatrolGuards.update({ status: "absent" }, { where: { patrolRunId: patrolRun.id } });
 
     console.log(
       `🚨 PatrolRun ${patrolRun.id} marked ABSENT (missed start)`
@@ -338,6 +340,7 @@ for (const patrolRun of patrolRuns) {
     now.isAfter(estimatedEnd)
   ) {
     await patrolRun.update({ status: "delayed" });
+    await PatrolGuards.update({ status: "delayed" }, { where: { patrolRunId: patrolRun.id } });
 
     console.log(
       `⏳ PatrolRun ${patrolRun.id} marked DELAYED`
@@ -355,6 +358,7 @@ for (const patrolRun of patrolRuns) {
 
     if (now.isAfter(delayedLimit)) {
       await patrolRun.update({ status: "absent" });
+      await PatrolGuards.update({ status: "absent" }, { where: { patrolRunId: patrolRun.id } });
 
       console.log(
         `🚨 PatrolRun ${patrolRun.id} marked ABSENT (30 min after delayed)`

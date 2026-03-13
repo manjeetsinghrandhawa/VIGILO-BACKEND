@@ -27,6 +27,21 @@ const PatrolRun = sequelize.define(
   },
   onDelete: "CASCADE",
 },
+type: {
+  type: DataTypes.STRING,
+  allowNull: true,
+  defaultValue: "patrol",
+},
+
+date: {
+  type: DataTypes.DATEONLY,
+  allowNull: true,
+},
+
+shiftTotalHours: {
+  type: DataTypes.FLOAT,
+  allowNull: true,
+},
 
 guardIds: {
   type: DataTypes.JSON,

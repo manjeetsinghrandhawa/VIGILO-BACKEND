@@ -687,6 +687,8 @@ const perGuardPayment =
         estimatedCompletion,
         notes,
         unitPrice: parsedUnitPrice,
+        type: "patrol",
+        date: start.toISOString().split("T")[0], // extract date portion
         totalHours,
         totalPatrolCost,
         runStructure,

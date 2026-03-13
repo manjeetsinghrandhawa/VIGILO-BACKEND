@@ -1555,6 +1555,10 @@ const shiftEnd = new Date(
       shiftId: shift.id,
       shiftType: type,
       orderId: shift.orderId,
+      guardId: guardId,
+      guardName: activeShift.User?.name || null,
+      guardName: activeShift.name || null,
+      guardStatus: activeShift.status,
 
       // 📍 Location details
       locationName: shift.order?.locationName || null,
@@ -1770,7 +1774,10 @@ if (now > shiftStart) {
       warnings,
       data: {
         shiftId: shiftId,
+        shiftStatus: shift.status,
         guardId,
+        guardName: guard?.name || null,
+        guardStatus: assignment.status,
         shiftType: type,
         shiftDate: formatDate(shiftStart),
         shiftTotalHours: shift?.shiftTotalHours || null,
@@ -1794,15 +1801,28 @@ if (now > shiftStart) {
 // CLOCK-OUT
 export const clockOut = async (req, res, next) => {
   try {
-    const { staticId, guardId } = req.body;
+    const { staticId, patrolRunId, guardId, type } = req.body;
 
-    if (!staticId || !guardId) {
-      return next(new ErrorHandler("staticId and guardId are required", 400));
+    const shiftId = type === "static" ? staticId : patrolRunId;
+
+    if (!shiftId || !guardId || !type) {
+      return next(
+        new ErrorHandler("shiftId, guardId and type are required", 400)
+      );
     }
 
-    const assignment = await StaticGuards.findOne({
-      where: { staticId, guardId },
-      include: [{ model: Static, as: "static" }],
+    const isStatic = type === "static";
+    const ShiftModel = isStatic ? Static : PatrolRun;
+    const ShiftGuardModel = isStatic ? StaticGuards : PatrolGuards;
+    const shiftAlias = isStatic ? "static" : "patrolRun";
+
+    // Fetch assignment
+    const assignment = await ShiftGuardModel.findOne({
+      where: {
+        [isStatic ? "staticId" : "patrolRunId"]: shiftId,
+        guardId,
+      },
+      include: [{ model: ShiftModel, as: shiftAlias }],
     });
 
     if (!assignment) {
@@ -1817,89 +1837,151 @@ export const clockOut = async (req, res, next) => {
       return next(new ErrorHandler("You have already clocked out", 400));
     }
 
-    const shift = assignment.static;
+    const shift = assignment[shiftAlias];
     const now = new Date();
-
-    const shiftStart = new Date(shift.startTime);
-    const shiftEnd = new Date(shift.endTime);
     const clockIn = new Date(assignment.clockInTime);
 
-    const oneHourAfterEnd = new Date(shiftEnd.getTime() + 60 * 60 * 1000);
-    const thirtyMinAfterEnd = new Date(shiftEnd.getTime() + 30 * 60 * 1000);
+    const shiftStart = new Date(
+      isStatic ? shift.startTime : shift.startDateTime
+    );
+
+    const shiftEnd = new Date(
+      isStatic ? shift.endTime : shift.estimatedCompletion
+    );
 
     let warnings = [];
     let assignmentStatus = "completed";
     let shiftStatus = "completed";
 
-    // 🚫 Too late → ABSENT
-    if (now > oneHourAfterEnd) {
-      assignment.status = "absent";
-      assignment.clockOutTime = null;
-      await assignment.save();
+    /**
+     * ======================================================
+     * STATIC SHIFT LOGIC (UNCHANGED)
+     * ======================================================
+     */
 
-      await shift.update({ status: "absent" });
+    if (isStatic) {
+      const oneHourAfterEnd = new Date(shiftEnd.getTime() + 60 * 60 * 1000);
+      const thirtyMinAfterEnd = new Date(shiftEnd.getTime() + 30 * 60 * 1000);
 
-      return res.status(400).json({
-        success: false,
-        message: "Shift marked as absent due to late clock-out",
-        data: {
-          shiftEndTime: formatTime(shiftEnd),
-          allowedTill: formatTime(oneHourAfterEnd),
-        },
-      });
+      // 🚫 Too late → ABSENT
+      if (now > oneHourAfterEnd) {
+        assignment.status = "absent";
+        assignment.clockOutTime = null;
+        await assignment.save();
+
+        await shift.update({ status: "absent" });
+
+        return res.status(400).json({
+          success: false,
+          message: "Shift marked as absent due to late clock-out",
+          data: {
+            shiftEndTime: formatTime(shiftEnd),
+            allowedTill: formatTime(oneHourAfterEnd),
+          },
+        });
+      }
+
+      // ⚠️ Early clock-out
+      if (now < shiftEnd) {
+        assignmentStatus = "ended_early";
+        shiftStatus = "ended_early";
+        warnings.push("Shift ended early.");
+      }
+
+      // ⚠️ Late but acceptable
+      if (now > thirtyMinAfterEnd) {
+        warnings.push("Late_clock-out");
+      }
     }
 
-    // ⚠️ Early clock-out
-    if (now < shiftEnd) {
-      assignmentStatus = "ended_early";
-      shiftStatus = "ended_early";
-      warnings.push("Shift ended early.");
+    /**
+     * ======================================================
+     * PATROL RUN LOGIC (NEW)
+     * ======================================================
+     */
+
+    if (!isStatic) {
+      if (!["ongoing", "delayed","absent"].includes(shift.status)) {
+        return res.status(400).json({
+          success: false,
+          message: "Patrol run can only be clocked out from ongoing or delayed status",
+        });
+      }
+
+      // ongoing → check completion
+      if (shift.status === "ongoing") {
+        if (now >= shiftEnd) {
+          shiftStatus = "completed";
+          assignmentStatus = "completed";
+        } else {
+          warnings.push("Patrol run ended before estimated completion.");
+        }
+      }
+
+      // delayed → remain delayed
+      if (shift.status === "delayed") {
+        shiftStatus = "delayed";
+        assignmentStatus = "completed";
+      }
+
+      // absent → remain absent
+      if (shift.status === "absent") {
+        shiftStatus = "absent";
+        assignmentStatus = "completed";
+      }
     }
 
-    // ⚠️ Late but acceptable (after 30 mins)
-    if (now > thirtyMinAfterEnd) {
-      warnings.push("Late_clock-out");
-    }
+    /**
+     * ======================================================
+     * CALCULATE HOURS
+     * ======================================================
+     */
 
-    // ⏱ TOTAL HOURS (shift only)
     const totalMs = now - clockIn;
     const totalHours = Number((totalMs / (1000 * 60 * 60)).toFixed(2));
 
-    // ✅ SAVE
+    /**
+     * ======================================================
+     * SAVE
+     * ======================================================
+     */
+
     assignment.clockOutTime = now;
     assignment.totalHours = totalHours;
     assignment.status = assignmentStatus;
+
     await assignment.save();
 
     await shift.update({ status: shiftStatus });
+    await assignment.update({status: assignmentStatus});
 
-    if (assignmentStatus === "ended_early") {
-  await notifyGuardAndAdmin({
-    guardId,
-    shiftId: staticId,
-    status: "ended_early",
-    guardMessage: "You clocked out early. Shift marked as ended early.",
-    adminMessage: "Guard clocked out early. Shift marked as ended early.",
-    type: "CLOCK_OUT",
-  });
-} else {
-  // ✅ Normal completion
-  await notifyGuardAndAdmin({
-    guardId,
-    shiftId: staticId,
-    status: "completed",
-    guardMessage: "You have successfully clocked out. Shift completed.",
-    adminMessage: "Guard clocked out successfully. Shift completed.",
-    type: "CLOCK_OUT",
-  });
-}
+    /**
+     * ======================================================
+     * NOTIFICATIONS
+     * ======================================================
+     */
 
+    await notifyGuardAndAdmin({
+      guardId,
+      shiftId,
+      status: shiftStatus,
+      guardMessage: "You have successfully clocked out.",
+      adminMessage: "Guard clocked out successfully.",
+      type: "CLOCK_OUT",
+    });
+
+    /**
+     * ======================================================
+     * RESPONSE
+     * ======================================================
+     */
 
     return res.status(200).json({
       success: true,
       message: "Clock-Out successful",
       warnings,
       data: {
+        shiftType: type,
         shiftDate: formatDate(shiftStart),
         clockInTime: formatTime(clockIn),
         clockOutTime: formatTime(now),

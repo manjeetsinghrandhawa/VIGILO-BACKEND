@@ -34,6 +34,10 @@ const PatrolGuards = sequelize.define(
     paymentAmount: {
   type: DataTypes.DECIMAL(10, 2),
 },
+shiftType: {
+  type: DataTypes.ENUM("patrol"),
+  defaultValue: "patrol",
+},
 
     status: {
       type: DataTypes.ENUM(
