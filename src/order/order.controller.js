@@ -13,6 +13,9 @@ import StaticGuards from "../shift/staticGuards.model.js";
 import Incident from "../incident/incident.model.js";
 import ShiftChangeRequest from "./shiftChangeRequest.model.js";
 import { notifyAdminOnly } from "../../utils/notifyAdminOnly.helper.js";
+import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
+import Notification from "../notifications/notifications.model.js";
+import { notifyUserAndAdminForOrder } from "../../utils/userAdminNotification.helper.js";
 
 
 export const createOrder = catchAsyncError(async (req, res, next) => {
@@ -966,6 +969,82 @@ export const cancelOrder = async (req, res, next) => {
     });
   } catch (error) {
     console.error("CANCEL ORDER ERROR:", error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+export const adminCancelOrder = async (req, res, next) => {
+  try {
+    const adminId = req.user?.id;
+    const { id: orderId } = req.params;
+    const { reason } = req.body;
+
+    if (!adminId) {
+      return next(
+        new ErrorHandler("Unauthorized access", StatusCodes.UNAUTHORIZED)
+      );
+    }
+
+    if (!reason || reason.trim() === "") {
+      return next(
+        new ErrorHandler(
+          "Cancellation reason is required",
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    // 🔍 Find order
+    const order = await Order.findByPk(orderId);
+
+    if (!order) {
+      return next(
+        new ErrorHandler("Order not found", StatusCodes.NOT_FOUND)
+      );
+    }
+
+    // ❌ Only PENDING orders can be cancelled by admin
+    if (order.status !== "pending") {
+      return next(
+        new ErrorHandler(
+          `Order cannot be cancelled when status is ${order.status}`,
+          StatusCodes.BAD_REQUEST
+        )
+      );
+    }
+
+    // ✅ Update order
+    order.status = "cancelled";
+    
+
+    await order.save();
+
+    // 🔔 Send notification to user
+    await notifyUserAndAdminForOrder({
+  userId: order.userId,
+  orderId: order.id,
+  status: "cancelled",
+
+  userMessage: `Your order has been cancelled by admin. Reason: ${reason}`,
+
+  adminMessage: `Admin cancelled order ${order.id}. Reason: ${reason}`,
+});
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Order cancelled successfully by admin",
+      data: {
+        id: order.id,
+        status: order.status,
+        cancelledAt: order.cancelledAt || new Date(),
+        reason: order.cancellationReason || reason, // store reason in order if you have a field for it
+      },
+    });
+  } catch (error) {
+    console.error("ADMIN CANCEL ORDER ERROR:", error);
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Internal server error",

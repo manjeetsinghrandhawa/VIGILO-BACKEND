@@ -51,3 +51,5 @@ export const notifyGuardAndAdmin = async ({
 
   await Notification.bulkCreate(notifications);
 };
+
+

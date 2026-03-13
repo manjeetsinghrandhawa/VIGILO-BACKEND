@@ -16,7 +16,8 @@ import {
   getMyOrdersByDate,
   requestShiftChange,
   editOrderForUser,
-  deleteOrder
+  deleteOrder,
+  adminCancelOrder
 } from "./order.controller.js";
 
 const route = express.Router();
@@ -42,7 +43,7 @@ route.delete("/deleteOrder/:id", auth, isUser, deleteOrder); // Soft delete by u
 route.get("/getAllOrders", auth, isAdmin, getAllOrders);
 route.get("/getAdminOrderById/:id", auth, isAdmin, getAdminOrderById);
 route.put("/editOrder/:id", auth, isAdmin, editOrder);
-route.post("/cancelOrder/:id", auth, isAdmin, cancelOrder);
+route.post("/adminCancelOrder/:id", auth, isAdmin, adminCancelOrder);
 route.post("/acceptOrder/:id", auth, isAdmin, acceptOrder);
 
 export default route;
