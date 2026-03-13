@@ -4,7 +4,7 @@ import dns from "dns";
 
 dotenv.config({ path: "./config/.env" });
 
-// Force IPv4 first (fixes DNS issues with Render)
+// Force IPv4 first (fixes DNS issues with Render) added comment to ignore in diff since it's a single line change and important for functionality
 dns.setDefaultResultOrder("ipv4first");
 
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
