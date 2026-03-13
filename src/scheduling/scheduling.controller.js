@@ -1802,7 +1802,7 @@ export const clockOut = async (req, res, next) => {
   try {
     const { staticId, patrolRunId, guardId, type } = req.body;
 
-    const shiftId = type === "static" ? staticId : patrolRunId;
+    const shiftId = type === "static" ? staticId : patrolRunId; // unified shiftId for both types
 
     if (!shiftId || !guardId || !type) {
       return next(
