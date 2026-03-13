@@ -1468,7 +1468,7 @@ const getShiftDuration = (start, end) => {
   return `${hours}h ${minutes}m`;
 };
 
-// CLOCK-IN
+// CLOCK-IN completed for both static shifts and patrol runs (with safety checks and detailed responses)
 export const clockIn = async (req, res, next) => {
   try {
     const { staticId, patrolRunId, guardId, type } = req.body;
