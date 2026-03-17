@@ -15,7 +15,7 @@ router.post("/createAlarm",auth,isAdmin,  createAlarm);
 router.get("/getMyAlarms", auth, isGaurd, getMyAlarms);
 router.get("/getAlarmDetailsForGuard/:alarmId", auth, isGaurd, getAlarmDetailsForGuard);
 router.post("/respondToAlarm/:alarmId", auth, isGaurd, respondToAlarm);
-router.post("/completeAlarm", auth, isGaurd, completeAlarm);
+router.post("/completeAlarm/:alarmId", auth, isGaurd, completeAlarm);
 router.get("/getAllAlarms", auth, isAdmin, getAllAlarms);
 router.delete("/deleteAlarm/:alarmId", auth, isAdmin, deleteAlarm);
 
