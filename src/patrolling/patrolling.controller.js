@@ -14,6 +14,8 @@ import { notifyGuardAndAdmin } from "../../utils/notification.helper.js";
 import PatrolGuards from "./PatrolGuards.model.js";
 import Order from "../order/order.model.js";
 import { Op } from "sequelize";
+import PDFDocument from "pdfkit";
+import sharp from "sharp";
 
 
 export const createPatrolSite = async (req, res, next) => {
@@ -2392,7 +2394,6 @@ export const downloadQR = async (req, res) => {
       return res.status(400).json({ error: "URL is required" });
     }
 
-    // Fetch image from S3
     const response = await fetch(url);
 
     if (!response.ok) {
@@ -2401,14 +2402,24 @@ export const downloadQR = async (req, res) => {
 
     const buffer = await response.arrayBuffer();
 
+    // ✅ Get real content type from S3
+    const contentType =
+      response.headers.get("content-type") || "application/octet-stream";
+
+    // ✅ Detect extension
+    let extension = "png";
+    if (contentType.includes("svg")) extension = "svg";
+    else if (contentType.includes("jpeg")) extension = "jpg";
+    else if (contentType.includes("png")) extension = "png";
+
     const safeName = (name || "checkpoint")
       .replace(/[^a-zA-Z0-9-_ ]/g, "")
       .trim();
 
-    const fileName = `${safeName || "checkpoint"}-QR.jpg`;
+    const fileName = `${safeName || "checkpoint"}-QR.${extension}`;
 
-    // Set headers for download
-    res.setHeader("Content-Type", "image/jpeg");
+    // ✅ Correct headers
+    res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
 
     res.send(Buffer.from(buffer));
@@ -2416,5 +2427,160 @@ export const downloadQR = async (req, res) => {
   } catch (error) {
     console.error("QR download backend error:", error);
     res.status(500).json({ error: "Failed to download QR" });
+  }
+};
+
+export const downloadSiteQRsPdf = async (req, res, next) => {
+  try {
+    const { siteId } = req.params;
+
+    if (!siteId) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        error: "siteId is required",
+      });
+    }
+
+    const site = await PatrolSite.findByPk(siteId, {
+      attributes: ["id", "name"],
+      include: [
+        {
+          model: PatrolCheckpoint,
+          as: "checkpoints",
+          attributes: ["id", "name"],
+          required: false,
+          include: [
+            {
+              model: QR,
+              as: "qr",
+              attributes: ["qrUrl"],
+              required: false,
+            },
+          ],
+        },
+        {
+          model: PatrolSubSite,
+          as: "subSites",
+          attributes: ["id", "name"],
+          required: false,
+          include: [
+            {
+              model: PatrolCheckpoint,
+              as: "checkpoints",
+              attributes: ["id", "name"],
+              required: false,
+              include: [
+                {
+                  model: QR,
+                  as: "qr",
+                  attributes: ["qrUrl"],
+                  required: false,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    if (!site) {
+      return next(new ErrorHandler("Patrol site not found", StatusCodes.NOT_FOUND));
+    }
+
+    const qrItems = [];
+
+    for (const checkpoint of site.checkpoints || []) {
+      if (checkpoint?.qr?.qrUrl) {
+        qrItems.push({
+          checkpointName: checkpoint.name || "Checkpoint",
+          scopeLabel: "Site Level",
+          qrUrl: checkpoint.qr.qrUrl,
+        });
+      }
+    }
+
+    for (const subSite of site.subSites || []) {
+      for (const checkpoint of subSite.checkpoints || []) {
+        if (checkpoint?.qr?.qrUrl) {
+          qrItems.push({
+            checkpointName: checkpoint.name || "Checkpoint",
+            scopeLabel: subSite.name || "Sub Site",
+            qrUrl: checkpoint.qr.qrUrl,
+          });
+        }
+      }
+    }
+
+    if (qrItems.length === 0) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        error: "No QR images found under this site",
+      });
+    }
+
+    const safeSiteName = (site.name || "patrol-site")
+      .replace(/[^a-zA-Z0-9-_ ]/g, "")
+      .trim()
+      .replace(/\s+/g, "-");
+
+    const fileName = `${safeSiteName || "patrol-site"}-all-qr.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+
+    const doc = new PDFDocument({ autoFirstPage: false, margin: 40 });
+    doc.pipe(res);
+
+    doc.addPage({ size: "A4" });
+    doc.fontSize(18).text(`QR Report: ${site.name || "Patrol Site"}`, { align: "left" });
+    doc.moveDown(0.5);
+    doc.fontSize(11).text(`Total QRs: ${qrItems.length}`);
+    doc.moveDown(0.2);
+    doc.text(`Generated At: ${new Date().toISOString()}`);
+
+    for (let i = 0; i < qrItems.length; i++) {
+      const item = qrItems[i];
+      doc.addPage({ size: "A4" });
+      doc.fontSize(14).text(`${i + 1}. ${item.checkpointName}`);
+      doc.moveDown(0.2);
+      doc.fontSize(10).text(`Scope: ${item.scopeLabel}`);
+      doc.moveDown(0.2);
+      doc.text(`Source: ${item.qrUrl}`);
+      doc.moveDown(0.5);
+
+      try {
+        const response = await fetch(item.qrUrl);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const contentType = (response.headers.get("content-type") || "").toLowerCase();
+        const originalBuffer = Buffer.from(await response.arrayBuffer());
+        const isSvg = contentType.includes("svg") || item.qrUrl.toLowerCase().includes(".svg");
+        const isJpeg = contentType.includes("jpeg") || contentType.includes("jpg");
+        const isPng = contentType.includes("png");
+
+        let pdfImageBuffer = originalBuffer;
+
+        // PDFKit supports PNG/JPEG; convert SVG and other formats to PNG.
+        if (isSvg || (!isPng && !isJpeg)) {
+          pdfImageBuffer = await sharp(originalBuffer, { density: 300 }).png().toBuffer();
+        }
+
+        doc.image(pdfImageBuffer, {
+          fit: [420, 420],
+          align: "center",
+          valign: "center",
+        });
+      } catch (err) {
+        doc.fillColor("red").fontSize(11).text(`Failed to load QR image: ${err.message}`);
+        doc.fillColor("black");
+      }
+    }
+
+    doc.end();
+  } catch (error) {
+    console.error("Download site QR PDF error:", error);
+    return next(new ErrorHandler("Failed to generate site QR PDF", StatusCodes.INTERNAL_SERVER_ERROR));
   }
 };

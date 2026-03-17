@@ -22,7 +22,8 @@ viewCheckpointById,
 editPatrolRun,
 getAllPatrolSubSites,
 getAllPatrolCheckpoints,
-downloadQR
+downloadQR,
+downloadSiteQRsPdf
  } from "./patrolling.controller.js";
 
 const route = express.Router();
@@ -50,5 +51,6 @@ route.put("/editPatrolRun/:id", auth, isAdmin, editPatrolRun);
 route.get("/getAllPatrolSubSites", auth, isAdmin, getAllPatrolSubSites);
 route.get("/getAllCheckpoints", auth, isAdmin, getAllPatrolCheckpoints);
 route.get("/downloadQR",auth, isAdmin, downloadQR);
+route.get("/downloadSiteQRsPdf/:siteId", auth, isAdmin, downloadSiteQRsPdf);
 
 export default route;
