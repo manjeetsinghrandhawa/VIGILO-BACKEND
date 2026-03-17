@@ -2383,3 +2383,38 @@ export const getAllPatrolCheckpoints = async (req, res, next) => {
     );
   }
 };
+
+export const downloadQR = async (req, res) => {
+  try {
+    const { url, name } = req.query;
+
+    if (!url) {
+      return res.status(400).json({ error: "URL is required" });
+    }
+
+    // Fetch image from S3
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch image from S3");
+    }
+
+    const buffer = await response.arrayBuffer();
+
+    const safeName = (name || "checkpoint")
+      .replace(/[^a-zA-Z0-9-_ ]/g, "")
+      .trim();
+
+    const fileName = `${safeName || "checkpoint"}-QR.jpg`;
+
+    // Set headers for download
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+
+    res.send(Buffer.from(buffer));
+
+  } catch (error) {
+    console.error("QR download backend error:", error);
+    res.status(500).json({ error: "Failed to download QR" });
+  }
+};

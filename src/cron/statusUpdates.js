@@ -26,6 +26,13 @@ const buildDateTime = (date, time, tz) => {
 
 let shiftCronRunning = false;
 let isCronRunning = false;
+let patrolCronRunning = false;
+let alarmCronRunning = false;
+
+const ORDER_BATCH_SIZE = Number(process.env.ORDER_CRON_BATCH_SIZE || 50);
+const SHIFT_BATCH_SIZE = Number(process.env.SHIFT_CRON_BATCH_SIZE || 50);
+const PATROL_BATCH_SIZE = Number(process.env.PATROL_CRON_BATCH_SIZE || 50);
+const ALARM_BATCH_SIZE = Number(process.env.ALARM_CRON_BATCH_SIZE || 50);
 
 const updateOrderStatuses = async () => {
    if (isCronRunning) {
@@ -44,7 +51,7 @@ const updateOrderStatuses = async () => {
           [Op.in]: ["pending", "upcoming", "ongoing"],
         },
       },
-      limit: 50, 
+      limit: ORDER_BATCH_SIZE,
     });
 
     let updatedCount = 0;
@@ -117,10 +124,10 @@ const updateOrderStatuses = async () => {
 };
 
 /**
- * 🔁 RUN EVERY MINUTE
+ * 🔁 RUN EVERY MINUTE (at second 0)
  */
 cron.schedule(
-  "*/1 * * * *",
+  "0 * * * * *",
   async () => {
     await updateOrderStatuses();
   },
@@ -128,8 +135,8 @@ cron.schedule(
     timezone: getTimeZone(),
   }
 );
-cron.schedule("*/1 * * * *", async () => {
-   if (shiftCronRunning) {
+const updateShiftStatuses = async () => {
+  if (shiftCronRunning) {
     console.log("⏳ Shift cron already running, skipped");
     return;
   }
@@ -141,24 +148,23 @@ cron.schedule("*/1 * * * *", async () => {
     const graceMinutes = 10;
 
     const shifts = await Static.findAll({
+      attributes: ["id", "status", "startTime", "endTime"],
       where: {
         status: {
-          [Op.in]: ["pending","upcoming", "ongoing","overtime_started"],
+          [Op.in]: ["pending", "upcoming", "ongoing", "overtime_started"],
         },
       },
+      limit: SHIFT_BATCH_SIZE,
       include: [
         {
           model: User,
           as: "guards",
+          attributes: ["id", "name"],
           through: {
-             where: {
+            attributes: ["status", "clockInTime", "clockOutTime", "overtimeStartTime"],
+            where: {
               status: {
-                [Op.in]: [
-                  "pending",
-                  "accepted",
-                  "ongoing",
-                  "overtime_started",
-                ],
+                [Op.in]: ["pending", "accepted", "ongoing", "overtime_started"],
               },
             },
           },
@@ -169,296 +175,263 @@ cron.schedule("*/1 * * * *", async () => {
 
     for (const shift of shifts) {
       const shiftStart = moment(shift.startTime).tz(tz);
-      const shiftEnd = shift.endTime
-        ? moment(shift.endTime).tz(tz)
-        : null;
+      const shiftEnd = shift.endTime ? moment(shift.endTime).tz(tz) : null;
 
       for (const guard of shift.guards) {
         const assignment = guard.StaticGuards;
 
-         // 🔵 MISSED RESPOND
-    if (
-  shift.status === "pending" &&
-  assignment.status === "pending" &&
-  now.isSameOrAfter(shiftStart)
-) {
-  await shift.update({ status: "missed_respond" });
-  await assignment.update({ status: "missed_respond" });
-
-  await notifyGuardAndAdmin({
-    guardId: guard.id,
-    shiftId: shift.id,
-    status: "missed_respond",
-    guardMessage: "You missed responding to a shift assignment.",
-    adminMessage: `Guard ${guard.name} missed responding to shift.`,
-  });
-
-  continue;
-}
-
-
-        /**
-         * 🟡 CASE 2: Upcoming → no clock-in after 10 mins
-         */
         if (
-  shift.status === "upcoming" &&
-  now.isAfter(shiftStart.clone().add(graceMinutes, "minutes")) &&
-  !assignment.clockInTime
-) {
-  await shift.update({ status: "absent" });
-  await assignment.update({ status: "absent" });
+          shift.status === "pending" &&
+          assignment.status === "pending" &&
+          now.isSameOrAfter(shiftStart)
+        ) {
+          await shift.update({ status: "missed_respond" });
+          await assignment.update({ status: "missed_respond" });
 
-  await notifyGuardAndAdmin({
-    guardId: guard.id,
-    shiftId: shift.id,
-    status: "absent",
-    guardMessage: "You were marked absent due to no clock-in.",
-    adminMessage: `Guard ${guard.name} marked absent (no clock-in).`,
-  });
-}
+          await notifyGuardAndAdmin({
+            guardId: guard.id,
+            shiftId: shift.id,
+            status: "missed_respond",
+            guardMessage: "You missed responding to a shift assignment.",
+            adminMessage: `Guard ${guard.name} missed responding to shift.`,
+          });
 
-/**
- * 🔔 CASE 2.5: Forgot to Clock-Out (Notify after 5 minutes)
- * - Shift ongoing
- * - No clock-out
- * - Exactly after 5 minutes window
- */
-if (
-  shift.status === "ongoing" &&
-  assignment.status === "ongoing" &&
-  shiftEnd &&
-  !assignment.clockOutTime
-) {
-  const notifyAfter = shiftEnd.clone().add(5, "minutes");
-  const notifyUntil = shiftEnd.clone().add(6, "minutes"); // 1-min window
+          continue;
+        }
 
-  if (now.isSameOrAfter(notifyAfter) && now.isBefore(notifyUntil)) {
-    await notifyGuardAndAdmin({
-      guardId: guard.id,
-      shiftId: shift.id,
-      status: "clockout_reminder",
-      notifyAdmin: false, // 👈 guard only
-      guardMessage: `You have not clocked out of the shift (${shift.id}). Please clock out immediately.`,
-    });
-  }
-}
-
-        /**
-         * 🔴 CASE 3: Ongoing → no clock-out after end + 10 mins
-         */
         if (
-  shift.status === "ongoing" &&
-  shiftEnd &&
-  now.isAfter(shiftEnd.clone().add(graceMinutes, "minutes")) &&
-  !assignment.clockOutTime
-) {
-  await shift.update({ status: "absent" });
-  await assignment.update({ status: "absent" });
+          shift.status === "upcoming" &&
+          now.isAfter(shiftStart.clone().add(graceMinutes, "minutes")) &&
+          !assignment.clockInTime
+        ) {
+          await shift.update({ status: "absent" });
+          await assignment.update({ status: "absent" });
 
-  await notifyGuardAndAdmin({
-    guardId: guard.id,
-    shiftId: shift.id,
-    status: "absent",
-    guardMessage: "You were marked absent due to no clock-out.",
-    adminMessage: `Guard ${guard.name} marked absent (no clock-out).`,
-  });
-}
+          await notifyGuardAndAdmin({
+            guardId: guard.id,
+            shiftId: shift.id,
+            status: "absent",
+            guardMessage: "You were marked absent due to no clock-in.",
+            adminMessage: `Guard ${guard.name} marked absent (no clock-in).`,
+          });
+        }
 
-        /* 🟣 CASE 4: OVERTIME → MISSED END OVERTIME (3 HOURS) */
         if (
-  shift.status === "overtime_started" &&
-  assignment.status === "overtime_started" &&
-  assignment.overtimeStartTime
-) {
-  const overtimeStart = moment(assignment.overtimeStartTime).tz(tz);
-  const overtimeLimit = overtimeStart.clone().add(3, "hours");
+          shift.status === "ongoing" &&
+          assignment.status === "ongoing" &&
+          shiftEnd &&
+          !assignment.clockOutTime
+        ) {
+          const notifyAfter = shiftEnd.clone().add(5, "minutes");
+          const notifyUntil = shiftEnd.clone().add(6, "minutes");
 
-  if (now.isSameOrAfter(overtimeLimit)) {
-    await assignment.update({ status: "missed_endovertime" });
-    await shift.update({ status: "missed_endovertime" });
+          if (now.isSameOrAfter(notifyAfter) && now.isBefore(notifyUntil)) {
+            await notifyGuardAndAdmin({
+              guardId: guard.id,
+              shiftId: shift.id,
+              status: "clockout_reminder",
+              notifyAdmin: false,
+              guardMessage: `You have not clocked out of the shift (${shift.id}). Please clock out immediately.`,
+            });
+          }
+        }
 
-    await notifyGuardAndAdmin({
-      guardId: guard.id,
-      shiftId: shift.id,
-      status: "missed_endovertime",
-      guardMessage: "You missed ending your overtime.",
-      adminMessage: `Guard ${guard.name} missed ending overtime.`,
-    });
-  }
-}
+        if (
+          shift.status === "ongoing" &&
+          shiftEnd &&
+          now.isAfter(shiftEnd.clone().add(graceMinutes, "minutes")) &&
+          !assignment.clockOutTime
+        ) {
+          await shift.update({ status: "absent" });
+          await assignment.update({ status: "absent" });
+
+          await notifyGuardAndAdmin({
+            guardId: guard.id,
+            shiftId: shift.id,
+            status: "absent",
+            guardMessage: "You were marked absent due to no clock-out.",
+            adminMessage: `Guard ${guard.name} marked absent (no clock-out).`,
+          });
+        }
+
+        if (
+          shift.status === "overtime_started" &&
+          assignment.status === "overtime_started" &&
+          assignment.overtimeStartTime
+        ) {
+          const overtimeStart = moment(assignment.overtimeStartTime).tz(tz);
+          const overtimeLimit = overtimeStart.clone().add(3, "hours");
+
+          if (now.isSameOrAfter(overtimeLimit)) {
+            await assignment.update({ status: "missed_endovertime" });
+            await shift.update({ status: "missed_endovertime" });
+
+            await notifyGuardAndAdmin({
+              guardId: guard.id,
+              shiftId: shift.id,
+              status: "missed_endovertime",
+              guardMessage: "You missed ending your overtime.",
+              adminMessage: `Guard ${guard.name} missed ending overtime.`,
+            });
+          }
+        }
       }
     }
-    console.log(`✅ Shift status cron updated shifts`);
 
-    /**
- * ===============================
- * 🚓 PATROL RUN STATUS CRON
- * ===============================
- */
-
-const patrolRuns = await PatrolRun.findAll({
-  where: {
-    status: {
-      [Op.in]: ["pending", "upcoming", "ongoing","delayed"],
-    },
-  },
-});
-
-for (const patrolRun of patrolRuns) {
-  const estimatedEnd = patrolRun.estimatedCompletion
-    ? moment(patrolRun.estimatedCompletion).tz(tz)
-    : null;
-
-  if (!estimatedEnd) continue;
-
-  /**
-   * 🔴 CASE 1 & 2:
-   * pending/upcoming → estimatedCompletion passed
-   * → mark ABSENT
-   */
-  if (
-    ["pending", "upcoming"].includes(patrolRun.status) &&
-    now.isAfter(estimatedEnd)
-  ) {
-    await patrolRun.update({ status: "absent" });
-    await PatrolGuards.update({ status: "absent" }, { where: { patrolRunId: patrolRun.id } });
-
-    console.log(
-      `🚨 PatrolRun ${patrolRun.id} marked ABSENT (missed start)`
-    );
-
-    continue;
-  }
-
-  /**
-   * 🟡 CASE 3:
-   * ongoing → estimatedCompletion passed
-   * → mark DELAYED
-   */
-  if (
-    patrolRun.status === "ongoing" &&
-    now.isAfter(estimatedEnd)
-  ) {
-    await patrolRun.update({ status: "delayed" });
-    await PatrolGuards.update({ status: "delayed" }, { where: { patrolRunId: patrolRun.id } });
-
-    console.log(
-      `⏳ PatrolRun ${patrolRun.id} marked DELAYED`
-    );
-  continue;
-  }
-
-  /**
-   * 🔴 CASE 4
-   * delayed → 30 minutes after estimatedCompletion
-   * → mark ABSENT
-   */
-  if (patrolRun.status === "delayed") {
-    const delayedLimit = estimatedEnd.clone().add(30, "minutes");
-
-    if (now.isAfter(delayedLimit)) {
-      await patrolRun.update({ status: "absent" });
-      await PatrolGuards.update({ status: "absent" }, { where: { patrolRunId: patrolRun.id } });
-
-      console.log(
-        `🚨 PatrolRun ${patrolRun.id} marked ABSENT (30 min after delayed)`
-      );
-    }
-  }
-}
-
-/**
- * ===============================
- * 🚨 ALARM STATUS CRON
- * ===============================
- */
-
-const alarms = await Alarm.findAll({
-  where: {
-    status: {
-      [Op.in]: ["pending", "ongoing"],
-    },
-  },
-  limit: 50,
-});
-
-for (const alarm of alarms) {
-
-  const createdAt = moment(alarm.createdAt).tz(tz);
-
-  const etaEnd = createdAt.clone().add(alarm.etaMinutes || 0, "minutes");
-
-  const slaEnd = createdAt.clone().add(
-    (alarm.etaMinutes || 0) + alarm.slaTimeMinutes,
-    "minutes"
-  );
-
-  const graceEnd = slaEnd.clone().add(30, "minutes");
-
-  /**
-   * 🔴 CASE 1
-   * pending → ETA passed
-   * → CANCELLED
-   */
-
-  if (
-    alarm.status === "pending" &&
-    now.isAfter(etaEnd)
-  ) {
-
-    await alarm.update({ status: "cancelled" });
-    await alarm.update({breach:true});
-
-    console.log(`🚨 Alarm ${alarm.id} cancelled (ETA missed)`);
-
-    continue;
-  }
-
-  /**
-   * 🟡 CASE 2
-   * ongoing → SLA passed
-   * → waiting for grace
-   */
-
-  if (
-    alarm.status === "ongoing" &&
-    now.isAfter(slaEnd) &&
-    now.isBefore(graceEnd)
-  ) {
-
-    console.log(`⏳ Alarm ${alarm.id} waiting grace period`);
-
-    continue;
-  }
-
-  /**
-   * 🔴 CASE 3
-   * ongoing → SLA + grace passed
-   * → ABSENT
-   */
-
-  if (
-    alarm.status === "ongoing" &&
-    now.isAfter(graceEnd)
-  ) {
-
-    await alarm.update({ status: "absent" });
-    await alarm.update({breach:true});
-
-    console.log(`🚨 Alarm ${alarm.id} marked ABSENT`);
-
-    continue;
-  }
-
-}
+    console.log("✅ Shift status cron updated shifts");
   } catch (error) {
-    console.error("ABSENT CRON ERROR:", error);
-  }
-  finally {
+    console.error("❌ SHIFT STATUS CRON ERROR:", error);
+  } finally {
     shiftCronRunning = false;
     console.log("✅ Shift status cron finished");
   }
-});
+};
+
+const updatePatrolRunStatuses = async () => {
+  if (patrolCronRunning) {
+    console.log("⏳ Patrol cron already running, skipped");
+    return;
+  }
+
+  patrolCronRunning = true;
+  try {
+    const tz = getTimeZone();
+    const now = moment().tz(tz);
+
+    const patrolRuns = await PatrolRun.findAll({
+      attributes: ["id", "status", "estimatedCompletion"],
+      where: {
+        status: {
+          [Op.in]: ["pending", "upcoming", "ongoing", "delayed"],
+        },
+      },
+      limit: PATROL_BATCH_SIZE,
+    });
+
+    for (const patrolRun of patrolRuns) {
+      const estimatedEnd = patrolRun.estimatedCompletion
+        ? moment(patrolRun.estimatedCompletion).tz(tz)
+        : null;
+
+      if (!estimatedEnd) continue;
+
+      if (
+        ["pending", "upcoming"].includes(patrolRun.status) &&
+        now.isAfter(estimatedEnd)
+      ) {
+        await patrolRun.update({ status: "absent" });
+        await PatrolGuards.update({ status: "absent" }, { where: { patrolRunId: patrolRun.id } });
+        console.log(`🚨 PatrolRun ${patrolRun.id} marked ABSENT (missed start)`);
+        continue;
+      }
+
+      if (patrolRun.status === "ongoing" && now.isAfter(estimatedEnd)) {
+        await patrolRun.update({ status: "delayed" });
+        await PatrolGuards.update({ status: "delayed" }, { where: { patrolRunId: patrolRun.id } });
+        console.log(`⏳ PatrolRun ${patrolRun.id} marked DELAYED`);
+        continue;
+      }
+
+      if (patrolRun.status === "delayed") {
+        const delayedLimit = estimatedEnd.clone().add(30, "minutes");
+        if (now.isAfter(delayedLimit)) {
+          await patrolRun.update({ status: "absent" });
+          await PatrolGuards.update({ status: "absent" }, { where: { patrolRunId: patrolRun.id } });
+          console.log(`🚨 PatrolRun ${patrolRun.id} marked ABSENT (30 min after delayed)`);
+        }
+      }
+    }
+
+    console.log("✅ Patrol status cron finished");
+  } catch (error) {
+    console.error("❌ PATROL STATUS CRON ERROR:", error);
+  } finally {
+    patrolCronRunning = false;
+  }
+};
+
+const updateAlarmStatuses = async () => {
+  if (alarmCronRunning) {
+    console.log("⏳ Alarm cron already running, skipped");
+    return;
+  }
+
+  alarmCronRunning = true;
+  try {
+    const tz = getTimeZone();
+    const now = moment().tz(tz);
+
+    const alarms = await Alarm.findAll({
+      attributes: ["id", "status", "createdAt", "etaMinutes", "slaTimeMinutes"],
+      where: {
+        status: {
+          [Op.in]: ["pending", "ongoing"],
+        },
+      },
+      limit: ALARM_BATCH_SIZE,
+    });
+
+    for (const alarm of alarms) {
+      const createdAt = moment(alarm.createdAt).tz(tz);
+      const etaEnd = createdAt.clone().add(alarm.etaMinutes || 0, "minutes");
+      const slaEnd = createdAt.clone().add((alarm.etaMinutes || 0) + alarm.slaTimeMinutes, "minutes");
+      const graceEnd = slaEnd.clone().add(30, "minutes");
+
+      if (alarm.status === "pending" && now.isAfter(etaEnd)) {
+        await alarm.update({ status: "cancelled", breach: true });
+        console.log(`🚨 Alarm ${alarm.id} cancelled (ETA missed)`);
+        continue;
+      }
+
+      if (alarm.status === "ongoing" && now.isAfter(slaEnd) && now.isBefore(graceEnd)) {
+        console.log(`⏳ Alarm ${alarm.id} waiting grace period`);
+        continue;
+      }
+
+      if (alarm.status === "ongoing" && now.isAfter(graceEnd)) {
+        await alarm.update({ status: "absent", breach: true });
+        console.log(`🚨 Alarm ${alarm.id} marked ABSENT`);
+        continue;
+      }
+    }
+
+    console.log("✅ Alarm status cron finished");
+  } catch (error) {
+    console.error("❌ ALARM STATUS CRON ERROR:", error);
+  } finally {
+    alarmCronRunning = false;
+  }
+};
+
+cron.schedule(
+  "20 * * * * *",
+  async () => {
+    await updateShiftStatuses();
+  },
+  {
+    timezone: getTimeZone(),
+  }
+);
+
+cron.schedule(
+  "35 * * * * *",
+  async () => {
+    await updatePatrolRunStatuses();
+  },
+  {
+    timezone: getTimeZone(),
+  }
+);
+
+cron.schedule(
+  "50 * * * * *",
+  async () => {
+    await updateAlarmStatuses();
+  },
+  {
+    timezone: getTimeZone(),
+  }
+);
 
 
 

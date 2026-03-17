@@ -36,47 +36,27 @@ initSocket(io);
 
 export { io };
 
-server.listen(process.env.PORT || 5000, () => {
-  console.log("Server running");
-});
+const PORT = process.env.PORT || 5000;
 
-// 🔥 CALL ASSOCIATIONS AFTER ALL MODELS ARE LOADED
-Object.values(sequelize.models).forEach((model) => {
-  if (model.associate) {
-    model.associate();
-  }
-});
-
-// then sync
-await sequelize.sync();
-
-
-app.get("/", (req, res) => {
-  res.send("Hello World from Node.js + Express + Sequelize + Postgres (Render)!");
-});
-
-app.get("/db-check", async (req, res) => {
-  try {
-    await sequelize.authenticate();
-    res.send(" Database connected successfully!");
-  } catch (error) {
-    console.error(error);
-    res.status(500).send("Database connection failed!");
-  }
-});
-
-const PORT = process.env.PORT || 9002;
 (async () => {
   try {
-    await sequelize.authenticate();
-    console.log("Connected to Render Postgres!");
-    await sequelize.sync({ alter: true }); 
-    console.log("All models were synchronized!");
+    Object.values(sequelize.models).forEach((model) => {
+      if (model.associate) {
+        model.associate();
+      }
+    });
 
-    app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+    await sequelize.authenticate();
+    console.log("Connected to Postgres");
+
+    await sequelize.sync();
+    console.log("Models synchronized");
+
+    server.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
     });
   } catch (error) {
-    console.error("Connection failed:", error);
+    console.error("Startup failed:", error);
+    process.exit(1);
   }
 })();
