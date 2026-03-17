@@ -2,6 +2,10 @@ import sequelize from "./config/database.js";
 import app from './app.js';
 import "./src/cron/statusUpdates.js";
 import "./utils/association.js";
+import { Server } from "socket.io";
+import http from "http";
+import initSocket from "./src/sockets/index.js";
+
 
 
 
@@ -21,6 +25,20 @@ import "./src/order/shiftChangeRequest.model.js";
 import "./src/alarm/alarm.model.js";
 import "./src/alarm/alarmGuards.model.js";
 
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+  },
+});
+
+initSocket(io);
+
+export { io };
+
+server.listen(process.env.PORT || 5000, () => {
+  console.log("Server running");
+});
 
 // 🔥 CALL ASSOCIATIONS AFTER ALL MODELS ARE LOADED
 Object.values(sequelize.models).forEach((model) => {

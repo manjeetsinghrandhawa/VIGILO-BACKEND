@@ -14,6 +14,7 @@ import notifications from "./src/notifications/notifications.router.js";
 import guardProfileRoute from "./src/guardProfile/guardProfile.router.js";
 import patrolRoute from "./src/patrolling/patrolling.router.js";
 import alarmRoute from "./src/alarm/alarm.router.js";
+import messageRoutes from "./src/messages/message.router.js";
 import "./utils/association.js";
 
 
@@ -41,6 +42,7 @@ app.use("/api/v1/notifications", notifications);
 app.use("/api/v1/guardProfile",guardProfileRoute);
 app.use("/api/v1/patrolling",patrolRoute);
 app.use("/api/v1/alarm",alarmRoute);
+app.use("/api/v1/messages",messageRoutes);
 app.get("/", (req, res) => res.json({ anc: "abc" }));
 
 app.use((req, res) => {
