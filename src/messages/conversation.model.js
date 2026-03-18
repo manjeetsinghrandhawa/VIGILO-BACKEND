@@ -9,8 +9,33 @@ const Conversation = sequelize.define("Conversation", {
   },
 
   type: {
-    type: DataTypes.ENUM("direct"),
+    type: DataTypes.ENUM("direct", "group"),
     defaultValue: "direct"
+  },
+
+  name: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+
+  avatar: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+
+  description: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+
+  createdBy: {
+    type: DataTypes.UUID,
+    allowNull: true
+  },
+
+  isArchived: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   }
 
 }, {

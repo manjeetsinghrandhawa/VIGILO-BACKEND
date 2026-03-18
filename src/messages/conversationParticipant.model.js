@@ -20,6 +20,36 @@ const ConversationParticipant = sequelize.define(
     allowNull: false
   },
 
+  role: {
+    type: DataTypes.ENUM("admin", "member"),
+    defaultValue: "member"
+  },
+
+  isMuted: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+
+  isPinned: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+
+  joinedAt: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW
+  },
+
+  leftAt: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+
+  isActive: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
+  },
+
   lastReadMessageId: {
     type: DataTypes.UUID,
     allowNull: true

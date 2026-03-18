@@ -8,6 +8,9 @@ import AlarmGuards from "../src/alarm/alarmGuards.model.js";
 import PatrolSite from "../src/patrolling/patrolSite.model.js";
 import PatrolRun from "../src/patrolling/patrolRun.model.js";
 import Message from "../src/messages/message.model.js";
+import MessageReceipt from "../src/messages/messageReceipt.model.js";
+import MessageVisibility from "../src/messages/messageVisibility.model.js";
+import UserPresence from "../src/messages/userPresence.model.js";
 import Conversation from "../src/messages/conversation.model.js";
 import ConversationParticipant from "../src/messages/conversationParticipant.model.js";
 
@@ -72,13 +75,94 @@ Alarm.belongsTo(PatrolRun, {
   as: "patrolRun",
 });
 
-Conversation.hasMany(Message,{
-foreignKey:"conversationId"
+Conversation.hasMany(Message, {
+  foreignKey: "conversationId",
+  as: "messages",
+  onDelete: "CASCADE",
 });
 
-ConversationParticipant.belongsTo(User,{
-foreignKey:"userId"
+Message.belongsTo(Conversation, {
+  foreignKey: "conversationId",
+  as: "conversation",
+});
+
+Conversation.hasMany(ConversationParticipant, {
+  foreignKey: "conversationId",
+  as: "participants",
+  onDelete: "CASCADE",
+});
+
+ConversationParticipant.belongsTo(Conversation, {
+  foreignKey: "conversationId",
+  as: "conversation",
+});
+
+ConversationParticipant.belongsTo(User, {
+  foreignKey: "userId",
+  as: "User",
+});
+
+User.hasMany(ConversationParticipant, {
+  foreignKey: "userId",
+  as: "conversationMemberships",
 });
 
 User.hasMany(Message, { foreignKey: "senderId", as: "sentMessages" });
-User.hasMany(Message, { foreignKey: "receiverId", as: "receivedMessages" });
+
+Message.belongsTo(User, {
+  foreignKey: "senderId",
+  as: "sender",
+});
+
+Message.hasMany(MessageReceipt, {
+  foreignKey: "messageId",
+  as: "receipts",
+  onDelete: "CASCADE",
+});
+
+MessageReceipt.belongsTo(Message, {
+  foreignKey: "messageId",
+  as: "message",
+});
+
+User.hasMany(MessageReceipt, {
+  foreignKey: "userId",
+  as: "messageReceipts",
+});
+
+MessageReceipt.belongsTo(User, {
+  foreignKey: "userId",
+  as: "user",
+});
+
+Message.hasMany(MessageVisibility, {
+  foreignKey: "messageId",
+  as: "visibility",
+  onDelete: "CASCADE",
+});
+
+MessageVisibility.belongsTo(Message, {
+  foreignKey: "messageId",
+  as: "message",
+});
+
+User.hasMany(MessageVisibility, {
+  foreignKey: "userId",
+  as: "messageVisibility",
+});
+
+MessageVisibility.belongsTo(User, {
+  foreignKey: "userId",
+  as: "user",
+});
+
+User.hasOne(UserPresence, {
+  foreignKey: "userId",
+  as: "presence",
+  onDelete: "CASCADE",
+});
+
+UserPresence.belongsTo(User, {
+  foreignKey: "userId",
+  as: "user",
+});

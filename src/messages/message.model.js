@@ -21,11 +21,42 @@ const Message = sequelize.define("Message", {
 
   content: {
     type: DataTypes.TEXT,
-    allowNull: false
+    allowNull: true
+  },
+
+  attachments: {
+    type: DataTypes.JSON,
+    allowNull: false,
+    defaultValue: []
+  },
+
+  replyToMessageId: {
+    type: DataTypes.UUID,
+    allowNull: true
+  },
+
+  isEdited: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+
+  editedAt: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+
+  deletedAt: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+
+  isDeletedForEveryone: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   },
 
   type: {
-    type: DataTypes.ENUM("text","image","file"),
+    type: DataTypes.ENUM("text","image","file","system"),
     defaultValue: "text"
   },
 
