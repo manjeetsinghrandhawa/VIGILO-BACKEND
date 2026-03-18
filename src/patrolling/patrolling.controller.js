@@ -612,8 +612,8 @@ export const createPatrolRun = async (req, res) => {
           return {
             id: cp.id,
             name: cp.name,
-            latitude: cp.latitude,
-            longitude: cp.longitude,
+            latitude: toCoordinateString(cp.latitude),
+            longitude: toCoordinateString(cp.longitude),
             verificationRange: cp.verificationRange,
             priorityLevel: cp.priorityLevel,
             description: cp.description,
@@ -640,8 +640,8 @@ export const createPatrolRun = async (req, res) => {
         return {
           id: cp.id,
           name: cp.name,
-          latitude: cp.latitude,
-          longitude: cp.longitude,
+          latitude: toCoordinateString(cp.latitude),
+          longitude: toCoordinateString(cp.longitude),
           verificationRange: cp.verificationRange,
           priorityLevel: cp.priorityLevel,
           description: cp.description,
@@ -655,8 +655,8 @@ export const createPatrolRun = async (req, res) => {
         id: site.id,
         name: site.name,
         address: site.address,
-        latitude: site.latitude,
-        longitude: site.longitude,
+        latitude: toCoordinateString(site.latitude),
+        longitude: toCoordinateString(site.longitude),
         description: site.description,
         status: "pending",
         subSites,
@@ -1948,13 +1948,21 @@ function checkIfSiteHasCompleted(site) {
   return false;
 }
 
+const toCoordinateString = (value) => {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  return String(value);
+};
+
 function buildSiteSnapshot(site, status) {
   return {
     id: site.id,
     name: site.name,
     address: site.address,
-    latitude: site.latitude,
-    longitude: site.longitude,
+    latitude: toCoordinateString(site.latitude),
+    longitude: toCoordinateString(site.longitude),
     description: site.description,
     status,
     subSites: site.subSites.map(sub => ({
@@ -1965,8 +1973,8 @@ function buildSiteSnapshot(site, status) {
       checkpoints: sub.checkpoints.map(cp => ({
         id: cp.id,
         name: cp.name,
-        latitude: cp.latitude,
-        longitude: cp.longitude,
+        latitude: toCoordinateString(cp.latitude),
+        longitude: toCoordinateString(cp.longitude),
         verificationRange: cp.verificationRange,
         priorityLevel: cp.priorityLevel,
         description: cp.description,
@@ -1978,8 +1986,8 @@ function buildSiteSnapshot(site, status) {
     checkpoints: site.checkpoints.map(cp => ({
       id: cp.id,
       name: cp.name,
-      latitude: cp.latitude,
-      longitude: cp.longitude,
+      latitude: toCoordinateString(cp.latitude),
+      longitude: toCoordinateString(cp.longitude),
       verificationRange: cp.verificationRange,
       priorityLevel: cp.priorityLevel,
       description: cp.description,
@@ -2169,8 +2177,8 @@ export const editPatrolRun = async (req, res) => {
         checkpoints: subSite.checkpoints.map(cp => ({
           id: cp.id,
           name: cp.name,
-          latitude: cp.latitude,
-          longitude: cp.longitude,
+          latitude: toCoordinateString(cp.latitude),
+          longitude: toCoordinateString(cp.longitude),
           verificationRange: cp.verificationRange,
           priorityLevel: cp.priorityLevel,
           description: cp.description,
@@ -2194,8 +2202,8 @@ export const editPatrolRun = async (req, res) => {
       const cpSnapshot = {
         id: checkpoint.id,
         name: checkpoint.name,
-        latitude: checkpoint.latitude,
-        longitude: checkpoint.longitude,
+        latitude: toCoordinateString(checkpoint.latitude),
+        longitude: toCoordinateString(checkpoint.longitude),
         verificationRange: checkpoint.verificationRange,
         priorityLevel: checkpoint.priorityLevel,
         description: checkpoint.description,
@@ -2230,7 +2238,10 @@ export const editPatrolRun = async (req, res) => {
       const allowedFields = ["name", "address", "latitude", "longitude", "description", "status"];
       allowedFields.forEach((field) => {
         if (Object.prototype.hasOwnProperty.call(item, field)) {
-          site[field] = item[field];
+          site[field] =
+            field === "latitude" || field === "longitude"
+              ? toCoordinateString(item[field])
+              : item[field];
         }
       });
     }
@@ -2255,7 +2266,10 @@ export const editPatrolRun = async (req, res) => {
       const allowedFields = ["name", "description", "status", "unitPrice", "estimatedDuration", "latitude", "longitude"];
       allowedFields.forEach((field) => {
         if (Object.prototype.hasOwnProperty.call(item, field)) {
-          foundSubSite[field] = item[field];
+          foundSubSite[field] =
+            field === "latitude" || field === "longitude"
+              ? toCoordinateString(item[field])
+              : item[field];
         }
       });
     }
@@ -2290,7 +2304,10 @@ export const editPatrolRun = async (req, res) => {
       const allowedFields = ["name", "latitude", "longitude", "verificationRange", "priorityLevel", "description", "status"];
       allowedFields.forEach((field) => {
         if (Object.prototype.hasOwnProperty.call(item, field)) {
-          foundCheckpoint[field] = item[field];
+          foundCheckpoint[field] =
+            field === "latitude" || field === "longitude"
+              ? toCoordinateString(item[field])
+              : item[field];
         }
       });
     }
