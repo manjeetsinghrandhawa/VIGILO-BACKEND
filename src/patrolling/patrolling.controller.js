@@ -2011,12 +2011,17 @@ export const editPatrolRun = async (req, res) => {
   try {
     const { id } = req.params;
     const {
+      startDateTime,
+      estimatedCompletion,
       addSites = [],
       removeSiteIds = [],
       addSubSites = [],
       removeSubSiteIds = [],
       addCheckpoints = [],
       removeCheckpointIds = [],
+      updateSites = [],
+      updateSubSites = [],
+      updateCheckpoints = [],
       guardIds,
     } = req.body;
 
@@ -2187,10 +2192,88 @@ export const editPatrolRun = async (req, res) => {
     }
 
     // ==========================
+    // UPDATE SITE DETAILS
+    // ==========================
+    for (const item of updateSites) {
+      const siteId = item.siteId || item.id;
+      const site = runStructure.find((s) => s.id === siteId);
+
+      if (!site) throw new Error("Site not found for update");
+
+      const allowedFields = ["name", "address", "latitude", "longitude", "description", "status"];
+      allowedFields.forEach((field) => {
+        if (Object.prototype.hasOwnProperty.call(item, field)) {
+          site[field] = item[field];
+        }
+      });
+    }
+
+    // ==========================
+    // UPDATE SUBSITE DETAILS
+    // ==========================
+    for (const item of updateSubSites) {
+      const subSiteId = item.subSiteId || item.id;
+      let foundSubSite = null;
+
+      for (const site of runStructure) {
+        const sub = site.subSites.find((s) => s.id === subSiteId);
+        if (sub) {
+          foundSubSite = sub;
+          break;
+        }
+      }
+
+      if (!foundSubSite) throw new Error("SubSite not found for update");
+
+      const allowedFields = ["name", "description", "status", "unitPrice", "estimatedDuration", "latitude", "longitude"];
+      allowedFields.forEach((field) => {
+        if (Object.prototype.hasOwnProperty.call(item, field)) {
+          foundSubSite[field] = item[field];
+        }
+      });
+    }
+
+    // ==========================
+    // UPDATE CHECKPOINT DETAILS
+    // ==========================
+    for (const item of updateCheckpoints) {
+      const checkpointId = item.checkpointId || item.id;
+      let foundCheckpoint = null;
+
+      for (const site of runStructure) {
+        const siteCheckpoint = site.checkpoints.find((cp) => cp.id === checkpointId);
+        if (siteCheckpoint) {
+          foundCheckpoint = siteCheckpoint;
+          break;
+        }
+
+        for (const sub of site.subSites) {
+          const subCheckpoint = sub.checkpoints.find((cp) => cp.id === checkpointId);
+          if (subCheckpoint) {
+            foundCheckpoint = subCheckpoint;
+            break;
+          }
+        }
+
+        if (foundCheckpoint) break;
+      }
+
+      if (!foundCheckpoint) throw new Error("Checkpoint not found for update");
+
+      const allowedFields = ["name", "latitude", "longitude", "verificationRange", "priorityLevel", "description", "status"];
+      allowedFields.forEach((field) => {
+        if (Object.prototype.hasOwnProperty.call(item, field)) {
+          foundCheckpoint[field] = item[field];
+        }
+      });
+    }
+
+    // ==========================
     // UPDATE GUARDS
     // ==========================
+    let normalizedGuardIds;
     if (Array.isArray(guardIds)) {
-      const normalizedGuardIds = [...new Set(guardIds.filter(Boolean))];
+      normalizedGuardIds = [...new Set(guardIds.filter(Boolean))];
 
       const existingAssignments = await PatrolGuards.findAll({
         where: { patrolRunId: id },
@@ -2231,13 +2314,71 @@ export const editPatrolRun = async (req, res) => {
 
     const totals = recalculateTotals(runStructure);
 
+    let nextStartDateTime = patrolRun.startDateTime;
+    let nextEstimatedCompletion = patrolRun.estimatedCompletion;
+
+    if (startDateTime !== undefined) {
+      const parsedStart = new Date(startDateTime);
+      if (Number.isNaN(parsedStart.getTime())) {
+        throw new Error("Invalid startDateTime");
+      }
+      nextStartDateTime = parsedStart;
+    }
+
+    if (estimatedCompletion !== undefined) {
+      const parsedEstimated = new Date(estimatedCompletion);
+      if (Number.isNaN(parsedEstimated.getTime())) {
+        throw new Error("Invalid estimatedCompletion");
+      }
+      nextEstimatedCompletion = parsedEstimated;
+    }
+
+    let updatedTotalHours = patrolRun.totalHours;
+    let updatedTotalPatrolCost = patrolRun.totalPatrolCost;
+    let updatedPerGuardPayment = patrolRun.perGuardPayment;
+
+    if (nextStartDateTime && nextEstimatedCompletion) {
+      updatedTotalHours =
+        Math.abs(new Date(nextEstimatedCompletion) - new Date(nextStartDateTime)) /
+        (1000 * 60 * 60);
+
+      if (patrolRun.unitPrice !== null && patrolRun.unitPrice !== undefined) {
+        const parsedUnitPrice = parseFloat(patrolRun.unitPrice);
+        if (!Number.isNaN(parsedUnitPrice)) {
+          updatedTotalPatrolCost = parsedUnitPrice * updatedTotalHours;
+
+          const effectiveGuardCount =
+            normalizedGuardIds?.length ??
+            (Array.isArray(patrolRun.guardIds) ? patrolRun.guardIds.length : 0);
+
+          if (effectiveGuardCount > 0) {
+            updatedPerGuardPayment = updatedTotalPatrolCost / effectiveGuardCount;
+          }
+        }
+      }
+    }
+
+    const patrolRunUpdatePayload = {
+      runStructure,
+      totalSites: totals.totalSites,
+      totalSubSites: totals.totalSubSites,
+      totalCheckpoints: totals.totalCheckpoints,
+      startDateTime: nextStartDateTime,
+      estimatedCompletion: nextEstimatedCompletion,
+      totalHours: updatedTotalHours,
+      totalPatrolCost: updatedTotalPatrolCost,
+      perGuardPayment: updatedPerGuardPayment,
+      date: nextStartDateTime
+        ? new Date(nextStartDateTime).toISOString().split("T")[0]
+        : patrolRun.date,
+    };
+
+    if (normalizedGuardIds) {
+      patrolRunUpdatePayload.guardIds = normalizedGuardIds;
+    }
+
     await patrolRun.update(
-      {
-        runStructure,
-        totalSites: totals.totalSites,
-        totalSubSites: totals.totalSubSites,
-        totalCheckpoints: totals.totalCheckpoints,
-      },
+      patrolRunUpdatePayload,
       { transaction: t }
     );
 
