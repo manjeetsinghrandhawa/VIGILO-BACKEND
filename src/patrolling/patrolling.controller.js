@@ -679,6 +679,8 @@ const totalPatrolCost = parsedUnitPrice * totalHours;
 const perGuardPayment =
   totalPatrolCost / guardIds.length;
 
+const normalizedRunStructure = stringifyRunStructure(runStructure);
+
     // 3️⃣ Create Patrol Run
     const patrolRun = await PatrolRun.create(
       {
@@ -695,7 +697,7 @@ const perGuardPayment =
         date: start.toISOString().split("T")[0], // extract date portion
         totalHours,
         totalPatrolCost,
-        runStructure,
+        runStructure: normalizedRunStructure,
         totalSites,
         totalSubSites,
         totalCheckpoints,
@@ -750,7 +752,7 @@ const perGuardPayment =
         },
         order,
         guards,
-        sites: runStructure,
+        sites: normalizedRunStructure,
       },
     });
   } catch (error) {
@@ -1956,6 +1958,34 @@ const toCoordinateString = (value) => {
   return String(value);
 };
 
+const toRunStructureStringValue = (value) => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return String(value);
+};
+
+const stringifyRunStructure = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((item) => stringifyRunStructure(item));
+  }
+
+  if (value && typeof value === "object" && !(value instanceof Date)) {
+    const output = {};
+    for (const [key, itemValue] of Object.entries(value)) {
+      output[key] = stringifyRunStructure(itemValue);
+    }
+    return output;
+  }
+
+  return toRunStructureStringValue(value);
+};
+
 function buildSiteSnapshot(site, status) {
   return {
     id: site.id,
@@ -2355,6 +2385,8 @@ export const editPatrolRun = async (req, res) => {
         );
       }
     }
+
+    runStructure = stringifyRunStructure(runStructure);
 
     const totals = recalculateTotals(runStructure);
 
