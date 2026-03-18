@@ -302,13 +302,28 @@ const updatePatrolRunStatuses = async () => {
       attributes: ["id", "status", "estimatedCompletion"],
       where: {
         status: {
-          [Op.in]: ["pending", "upcoming", "ongoing", "delayed"],
+          [Op.in]: ["pending", "upcoming", "ongoing", "delayed", "absent"],
         },
       },
       limit: PATROL_BATCH_SIZE,
     });
 
     for (const patrolRun of patrolRuns) {
+      // Keep patrol guard assignments in sync when run is already absent.
+      if (patrolRun.status === "absent") {
+        await PatrolGuards.update(
+          { status: "absent" },
+          {
+            where: {
+              patrolRunId: patrolRun.id,
+              status: { [Op.ne]: "absent" },
+            },
+          }
+        );
+        console.log(`🚨 PatrolRun ${patrolRun.id} is ABSENT, synced guards to ABSENT`);
+        continue;
+      }
+
       const estimatedEnd = patrolRun.estimatedCompletion
         ? moment(patrolRun.estimatedCompletion).tz(tz)
         : null;
