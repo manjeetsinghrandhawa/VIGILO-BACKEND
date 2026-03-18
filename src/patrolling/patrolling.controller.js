@@ -2017,7 +2017,7 @@ export const editPatrolRun = async (req, res) => {
       removeSubSiteIds = [],
       addCheckpoints = [],
       removeCheckpointIds = [],
-      newGuardId,
+      guardIds,
     } = req.body;
 
     const patrolRun = await PatrolRun.findOne({
@@ -2187,22 +2187,46 @@ export const editPatrolRun = async (req, res) => {
     }
 
     // ==========================
-    // UPDATE GUARD
+    // UPDATE GUARDS
     // ==========================
-    if (newGuardId) {
-      await PatrolGuards.destroy({
-        where: { patrolRunId },
+    if (Array.isArray(guardIds)) {
+      const normalizedGuardIds = [...new Set(guardIds.filter(Boolean))];
+
+      const existingAssignments = await PatrolGuards.findAll({
+        where: { patrolRunId: id },
         transaction: t,
       });
 
-      await PatrolGuards.create(
-        {
-          patrolRunId,
-          guardId: newGuardId,
-          status: "pending",
-        },
-        { transaction: t }
+      const existingGuardIds = existingAssignments.map((assignment) => assignment.guardId);
+
+      const guardsToRemove = existingGuardIds.filter(
+        (existingGuardId) => !normalizedGuardIds.includes(existingGuardId)
       );
+
+      if (guardsToRemove.length) {
+        await PatrolGuards.destroy({
+          where: {
+            patrolRunId: id,
+            guardId: guardsToRemove,
+          },
+          transaction: t,
+        });
+      }
+
+      const guardsToAdd = normalizedGuardIds.filter(
+        (incomingGuardId) => !existingGuardIds.includes(incomingGuardId)
+      );
+
+      for (const guardId of guardsToAdd) {
+        await PatrolGuards.create(
+          {
+            patrolRunId: id,
+            guardId,
+            status: "pending",
+          },
+          { transaction: t }
+        );
+      }
     }
 
     const totals = recalculateTotals(runStructure);
