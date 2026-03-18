@@ -16,6 +16,8 @@ import Order from "../order/order.model.js";
 import { Op } from "sequelize";
 import PDFDocument from "pdfkit";
 import sharp from "sharp";
+import moment from "moment-timezone";
+import { getTimeZone } from "../../utils/timeZone.js";
 
 
 export const createPatrolSite = async (req, res, next) => {
@@ -2005,6 +2007,31 @@ function recalculateTotals(structure) {
   return { totalSites, totalSubSites, totalCheckpoints };
 }
 
+const parsePatrolDateTime = (value, tz) => {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  const rawValue = String(value).trim();
+  const hasTimezone = /([zZ]|[+\-]\d{2}:\d{2})$/.test(rawValue);
+
+  const parsed = hasTimezone
+    ? moment(rawValue)
+    : moment.tz(
+        rawValue,
+        [
+          "YYYY-MM-DDTHH:mm",
+          "YYYY-MM-DDTHH:mm:ss",
+          "YYYY-MM-DD HH:mm",
+          "YYYY-MM-DD HH:mm:ss",
+          moment.ISO_8601,
+        ],
+        tz
+      );
+
+  return parsed.isValid() ? parsed.toDate() : null;
+};
+
 export const editPatrolRun = async (req, res) => {
   const t = await sequelize.transaction();
 
@@ -2317,20 +2344,30 @@ export const editPatrolRun = async (req, res) => {
     let nextStartDateTime = patrolRun.startDateTime;
     let nextEstimatedCompletion = patrolRun.estimatedCompletion;
 
+    const businessTz = getTimeZone();
+
     if (startDateTime !== undefined) {
-      const parsedStart = new Date(startDateTime);
-      if (Number.isNaN(parsedStart.getTime())) {
+      const parsedStart = parsePatrolDateTime(startDateTime, businessTz);
+      if (!parsedStart) {
         throw new Error("Invalid startDateTime");
       }
       nextStartDateTime = parsedStart;
     }
 
     if (estimatedCompletion !== undefined) {
-      const parsedEstimated = new Date(estimatedCompletion);
-      if (Number.isNaN(parsedEstimated.getTime())) {
+      const parsedEstimated = parsePatrolDateTime(estimatedCompletion, businessTz);
+      if (!parsedEstimated) {
         throw new Error("Invalid estimatedCompletion");
       }
       nextEstimatedCompletion = parsedEstimated;
+    }
+
+    if (
+      nextStartDateTime &&
+      nextEstimatedCompletion &&
+      moment(nextEstimatedCompletion).isBefore(moment(nextStartDateTime))
+    ) {
+      throw new Error("estimatedCompletion must be after startDateTime");
     }
 
     let updatedTotalHours = patrolRun.totalHours;
