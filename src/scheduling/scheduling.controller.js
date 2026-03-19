@@ -2262,10 +2262,16 @@ if (!shift) {
 
   const clockInTime = pivot?.clockInTime || null;
   const clockOutTime = pivot?.clockOutTime || null;
+  const startLocal = moment(patrol.startDateTime).tz(tz);
 
   const overtimeStartTime = pivot?.overtimeStartTime || null;
   const overtimeEndTime = pivot?.overtimeEndTime || null;
   const overtimeHours = pivot?.overtimeHours || null;
+  const totalLoginHours = getTotalLoginHours(
+      clockInTime,
+      clockOutTime,
+      now
+    );
 
   return res.status(200).json({
     success: true,
@@ -2298,7 +2304,7 @@ if (!shift) {
 
       client: patrol.order?.user || null,
 
-      guards: patrol.guards || [],
+      guards: patrol.guards || null,
 
       timing: {
         startTime: patrol.startDateTime,
@@ -2308,6 +2314,7 @@ if (!shift) {
       attendance: {
         clockInTime,
         clockOutTime,
+          totalLoginHours,
 
         overtime: {
           overtimeStartTime,
@@ -2315,6 +2322,17 @@ if (!shift) {
           overtimeHours,
         },
       },
+      clockInInfo:
+          patrol.status === "upcoming"
+            ? {
+                enabled: now.isSameOrAfter(
+                  moment(startLocal).subtract(1, "hour")
+                ),
+                message: `Clock-in available from ${moment(startLocal)
+                  .subtract(1, "hour")
+                  .format("hh:mm A")}`,
+              }
+            : null,
 
       progress: {
         sites: {
@@ -2424,6 +2442,12 @@ if (!shift) {
   const overtimeStartTime = pivot?.overtimeStartTime || null;
   const overtimeEndTime = pivot?.overtimeEndTime || null;
   const overtimeHours = pivot?.overtimeHours || null;
+  const startLocal = moment(patrol.startDateTime).tz(tz);
+  const totalLoginHours = getTotalLoginHours(
+      clockInTime,
+      clockOutTime,
+      now
+    );
 
   return res.status(200).json({
     success: true,
@@ -2466,6 +2490,7 @@ if (!shift) {
       attendance: {
         clockInTime,
         clockOutTime,
+          totalLoginHours,
 
         overtime: {
           overtimeStartTime,
@@ -2473,6 +2498,18 @@ if (!shift) {
           overtimeHours,
         },
       },
+      
+      clockInInfo:
+          patrol.status === "upcoming"
+            ? {
+                enabled: now.isSameOrAfter(
+                  moment(startLocal).subtract(1, "hour")
+                ),
+                message: `Clock-in available from ${moment(startLocal)
+                  .subtract(1, "hour")
+                  .format("hh:mm A")}`,
+              }
+            : null,
 
       progress: {
         sites: {
@@ -2637,6 +2674,12 @@ if (!shift) {
   const overtimeStartTime = pivot?.overtimeStartTime || null;
   const overtimeEndTime = pivot?.overtimeEndTime || null;
   const overtimeHours = pivot?.overtimeHours || null;
+   const startLocal = moment(patrol.startDateTime).tz(tz);
+  const totalLoginHours = getTotalLoginHours(
+      clockInTime,
+      clockOutTime,
+      now
+    );
 
   return res.status(200).json({
     success: true,
@@ -2679,6 +2722,7 @@ if (!shift) {
       attendance: {
         clockInTime,
         clockOutTime,
+          totalLoginHours,
 
         overtime: {
           overtimeStartTime,
@@ -2686,6 +2730,18 @@ if (!shift) {
           overtimeHours,
         },
       },
+     
+      clockInInfo:
+          patrol.status === "upcoming"
+            ? {
+                enabled: now.isSameOrAfter(
+                  moment(startLocal).subtract(1, "hour")
+                ),
+                message: `Clock-in available from ${moment(startLocal)
+                  .subtract(1, "hour")
+                  .format("hh:mm A")}`,
+              }
+            : null,
 
       progress: {
         sites: {
