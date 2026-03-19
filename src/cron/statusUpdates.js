@@ -10,6 +10,7 @@ import { notifyAdminOnly } from "../../utils/notifyAdminOnly.helper.js";
 import PatrolRun from "../patrolling/patrolRun.model.js";
 import Alarm from "../alarm/alarm.model.js";
 import PatrolGuards from "../patrolling/PatrolGuards.model.js";
+import { clockIn } from "../scheduling/scheduling.controller.js";
 
 
 
@@ -302,7 +303,7 @@ const updatePatrolRunStatuses = async () => {
       attributes: ["id", "status", "estimatedCompletion"],
       where: {
         status: {
-          [Op.in]: ["pending", "upcoming", "ongoing", "delayed", "absent"],
+          [Op.in]: ["pending", "upcoming", "ongoing", "delayed", "absent","completed"],
         },
       },
       limit: PATROL_BATCH_SIZE,
@@ -354,6 +355,23 @@ const updatePatrolRunStatuses = async () => {
           await PatrolGuards.update({ status: "absent" }, { where: { patrolRunId: patrolRun.id } });
           console.log(`🚨 PatrolRun ${patrolRun.id} marked ABSENT (30 min after delayed)`);
         }
+      }
+
+      if (patrolRun.status === "ongoing" ) {
+        await patrolRun.update({ status: "ongoing" });
+        await PatrolGuards.update({ status: "ongoing" }, { where: { patrolRunId: patrolRun.id } });
+        await PatrolGuards.update({ clockInTime: now }, { where: { patrolRunId: patrolRun.id, clockInTime: null } });
+        console.log(`⏳ PatrolRun ${patrolRun.id} marked ONGOING`);
+
+        continue;
+      }
+
+      if (patrolRun.status === "completed" ) {
+        await patrolRun.update({ status: "completed" });
+        await PatrolGuards.update({ status: "completed" }, { where: { patrolRunId: patrolRun.id } });
+        console.log(`⏳ PatrolRun ${patrolRun.id} marked COMPLETED`);
+
+        continue;
       }
     }
 
