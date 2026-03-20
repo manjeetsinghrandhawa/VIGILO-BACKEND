@@ -300,7 +300,7 @@ const updatePatrolRunStatuses = async () => {
     const now = moment().tz(tz);
 
     const patrolRuns = await PatrolRun.findAll({
-      attributes: ["id", "status", "estimatedCompletion","estimatedCompletion"],
+      attributes: ["id", "status", "estimatedCompletion","startDateTime"],
       where: {
         status: {
           [Op.in]: ["pending", "upcoming", "ongoing", "delayed", "absent","completed"],
@@ -362,7 +362,6 @@ const updatePatrolRunStatuses = async () => {
 
     // set clock-in if not set
     await PatrolGuards.update(
-      { clockInTime: now.toDate() },
       {
         where: {
           patrolRunId: patrolRun.id,
@@ -391,7 +390,6 @@ const updatePatrolRunStatuses = async () => {
 
     // set clock-out if not set
     await PatrolGuards.update(
-      { clockOutTime: now.toDate() },
       {
         where: {
           patrolRunId: patrolRun.id,
