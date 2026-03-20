@@ -342,42 +342,81 @@ endDateTime: shift.endTime,
       );
     }
 
-    // ✅ Update guard pivot
-    patrolGuard.status = status;
-    await patrolGuard.save();
-
-    // ✅ If accepted → update patrolRun + runStructure snapshot
     if (status === "accepted") {
+  // Step 1: Get OTHER guards (exclude current)
+  const otherGuards = await PatrolGuards.findAll({
+    where: {
+      patrolRunId: patrolRun.id,
+      guardId: { [Op.ne]: userId },
+    },
+  });
 
-      let updatedStructure = patrolRun.runStructure;
+  // Step 2: Check if ALL OTHER guards are already "upcoming"
+  const allOthersUpcoming = otherGuards.every(
+    (g) => g.status === "upcoming"
+  );
 
-      // convert entire snapshot to upcoming
-      updatedStructure = updatedStructure.map((site) => ({
-        ...site,
+  // Step 3: Update current guard
+  await patrolGuard.update({ status: "upcoming" });
+
+  if (allOthersUpcoming) {
+    // 🔥 All others already upcoming → make full patrol upcoming
+
+    let updatedStructure = patrolRun.runStructure;
+
+    updatedStructure = updatedStructure.map((site) => ({
+      ...site,
+      status: "upcoming",
+      subSites: site.subSites.map((sub) => ({
+        ...sub,
         status: "upcoming",
-        subSites: site.subSites.map((sub) => ({
-          ...sub,
-          status: "upcoming",
-          checkpoints: sub.checkpoints.map((cp) => ({
-            ...cp,
-            status: "upcoming",
-          })),
-        })),
-        checkpoints: site.checkpoints.map((cp) => ({
+        checkpoints: sub.checkpoints.map((cp) => ({
           ...cp,
           status: "upcoming",
         })),
-      }));
-
-      await patrolRun.update({
+      })),
+      checkpoints: site.checkpoints.map((cp) => ({
+        ...cp,
         status: "upcoming",
-        runStructure: updatedStructure,
-      });
-    }
+      })),
+    }));
+
+    await patrolRun.update({
+      status: "upcoming",
+      runStructure: updatedStructure,
+    });
+  }
+}
 
     if (status === "rejected") {
-      await patrolRun.update({ status: "cancelled" });
-    }
+  // Step 1: Get OTHER guards (exclude current)
+  const otherGuards = await PatrolGuards.findAll({
+    where: {
+      patrolRunId: patrolRun.id,
+      guardId: { [Op.ne]: userId },
+    },
+  });
+
+  // Step 2: Check if ALL OTHER guards are already "cancelled"
+  const allOthersCancelled = otherGuards.every(
+    (g) => g.status === "cancelled"
+  );
+
+  // Step 3: Update current guard
+  await patrolGuard.update({ status: "cancelled" });
+
+  if (allOthersCancelled) {
+    // 🔥 All others already cancelled → cancel full patrol
+
+    await patrolRun.update({ status: "cancelled" });
+
+    // (Optional but recommended) ensure all guards are cancelled
+    await PatrolGuards.update(
+      { status: "cancelled" },
+      { where: { patrolRunId: patrolRun.id } }
+    );
+  }
+}
 
     /**
      * 🔔 Notifications (Patrol)
