@@ -15,6 +15,7 @@ import PatrolSite from "../patrolling/patrolSite.model.js";
 import PatrolSubSite from "../patrolling/patrolSubSite.model.js";
 import PatrolCheckpoint from "../patrolling/patrolCheckpoint.model.js";
 import Alarm from "../alarm/alarm.model.js";
+import { Op } from "sequelize";
 
 export const assignShift = catchAsyncError(async (req, res, next) => {
   const { orderId } = req.params;
