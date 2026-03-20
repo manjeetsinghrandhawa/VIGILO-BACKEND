@@ -306,7 +306,7 @@ const updatePatrolRunStatuses = async () => {
           [Op.in]: ["pending", "upcoming", "ongoing", "delayed", "absent","completed"],
         },
       },
-      limit: PATROL_BATCH_SIZE,
+      
     });
 
     for (const patrolRun of patrolRuns) {
@@ -360,16 +360,6 @@ const updatePatrolRunStatuses = async () => {
       { where: { patrolRunId: patrolRun.id } }
     );
 
-    // set clock-in if not set
-    await PatrolGuards.update(
-      {
-        where: {
-          patrolRunId: patrolRun.id,
-          clockInTime: null,
-        },
-      }
-    );
-
     console.log(`🚀 PatrolRun ${patrolRun.id} moved to ONGOING`);
     continue;
   }
@@ -388,15 +378,6 @@ const updatePatrolRunStatuses = async () => {
       { where: { patrolRunId: patrolRun.id } }
     );
 
-    // set clock-out if not set
-    await PatrolGuards.update(
-      {
-        where: {
-          patrolRunId: patrolRun.id,
-          clockOutTime: null,
-        },
-      }
-    );
 
     console.log(`✅ PatrolRun ${patrolRun.id} marked COMPLETED`);
     continue;
