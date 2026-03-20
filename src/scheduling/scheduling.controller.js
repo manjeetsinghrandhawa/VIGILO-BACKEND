@@ -1488,7 +1488,11 @@ if (!shiftId || !guardId || !type) {
 
     // 🚫 Guard already in an active shift
 const activeShift = await ShiftGuardModel.findOne({
-  where: { guardId, status: "ongoing" },
+  where: {
+  guardId,
+  status: "ongoing",
+  clockInTime: { [Op.ne]: null }, // ✅ only block if already clocked-in somewhere
+},
   include: [
     {
       model: ShiftModel,
@@ -1606,12 +1610,20 @@ const shiftEnd = new Date(
     }
 
     // 🚫 Only upcoming shifts
-    if (shift.status !== "upcoming") {
-      return res.status(400).json({
-        success: false,
-        message: "Clock-in is allowed only for upcoming shifts",
-      });
-    }
+    if (isStatic && shift.status !== "upcoming") {
+  return res.status(400).json({
+    success: false,
+    message: "Clock-in is allowed only for upcoming shifts",
+  });
+}
+
+// ✅ For patrol: allow both upcoming + ongoing
+if (!isStatic && !["upcoming", "ongoing"].includes(shift.status)) {
+  return res.status(400).json({
+    success: false,
+    message: "Clock-in allowed only for upcoming or ongoing patrols",
+  });
+}
 
     if (assignment.clockInTime) {
       return next(new ErrorHandler("You have already clocked in", 400));
@@ -1642,10 +1654,13 @@ const shiftEnd = new Date(
 
     // 🚫 Too late (missed completely)
     if (now > shiftEnd) {
-      assignment.status = "absent";
-      await assignment.save();
+  // ❌ Skip for patrol
+  if (isStatic) {
+    assignment.status = "absent";
+    await assignment.save();
 
-      await shift.update({ status: "absent" });
+    await shift.update({ status: "absent" });
+  }
 
       // 🔔 Optional notification hook
       await notifyGuardAndAdmin({
@@ -1688,12 +1703,12 @@ const shiftEnd = new Date(
     // ⚠️ Shift already completed (clock-in after endTime but within 1 hr)
 // ❌ Shift completed → mark ABSENT and block clock-in
 if (now > shiftEnd && now <= oneHourAfterEnd) {
-  // 🔴 Mark assignment absent
-  assignment.status = "absent";
-  await assignment.save();
+  if (isStatic) {
+    assignment.status = "absent";
+    await assignment.save();
 
-  // 🔴 Mark shift absent
-  await shift.update({ status: "absent" });
+    await shift.update({ status: "absent" });
+  }
 
   return res.status(400).json({
     success: false,
@@ -1731,11 +1746,18 @@ if (now > shiftEnd && now <= oneHourAfterEnd) {
 
     // ✅ CLOCK-IN
 assignment.clockInTime = now;
-assignment.status = "ongoing";
+
+// ✅ ONLY update status for static
+if (isStatic) {
+  assignment.status = "ongoing";
+}
+
 await assignment.save();
 
-// ✅ Update shift status
-await shift.update({ status: "ongoing" });
+// ✅ ONLY update shift status for static
+if (isStatic) {
+  await shift.update({ status: "ongoing" });
+}
 
 // 🔔 Notifications
 const guard = await User.findByPk(guardId, {
