@@ -300,7 +300,7 @@ const updatePatrolRunStatuses = async () => {
     const now = moment().tz(tz);
 
     const patrolRuns = await PatrolRun.findAll({
-      attributes: ["id", "status", "estimatedCompletion"],
+      attributes: ["id", "status", "estimatedCompletion","estimatedCompletion"],
       where: {
         status: {
           [Op.in]: ["pending", "upcoming", "ongoing", "delayed", "absent","completed"],
@@ -326,13 +326,18 @@ const updatePatrolRunStatuses = async () => {
       }
 
       const estimatedEnd = patrolRun.estimatedCompletion
-        ? moment(patrolRun.estimatedCompletion).tz(tz)
-        : null;
+    ? moment(patrolRun.estimatedCompletion).tz(tz)
+    : null;
 
-      if (!estimatedEnd) continue;
+  const startTime = patrolRun.startDateTime
+    ? moment(patrolRun.startDateTime).tz(tz)
+    : null;
+
+  if (!estimatedEnd || !startTime) continue;
+
 
       if (
-        ["pending", "upcoming"].includes(patrolRun.status) &&
+        ["pending"].includes(patrolRun.status) &&
         now.isAfter(estimatedEnd)
       ) {
         await patrolRun.update({ status: "absent" });
@@ -341,38 +346,97 @@ const updatePatrolRunStatuses = async () => {
         continue;
       }
 
-      if (patrolRun.status === "ongoing" && now.isAfter(estimatedEnd)) {
-        await patrolRun.update({ status: "delayed" });
-        await PatrolGuards.update({ status: "delayed" }, { where: { patrolRunId: patrolRun.id } });
-        console.log(`⏳ PatrolRun ${patrolRun.id} marked DELAYED`);
-        continue;
+      /**
+   * 🚀 UPCOMING → ONGOING
+   */
+  if (
+    patrolRun.status === "upcoming" &&
+    now.isSameOrAfter(startTime)
+  ) {
+    await patrolRun.update({ status: "ongoing" });
+
+    await PatrolGuards.update(
+      { status: "ongoing" },
+      { where: { patrolRunId: patrolRun.id } }
+    );
+
+    // set clock-in if not set
+    await PatrolGuards.update(
+      { clockInTime: now.toDate() },
+      {
+        where: {
+          patrolRunId: patrolRun.id,
+          clockInTime: null,
+        },
       }
+    );
 
-      if (patrolRun.status === "delayed") {
-        const delayedLimit = estimatedEnd.clone().add(30, "minutes");
-        if (now.isAfter(delayedLimit)) {
-          await patrolRun.update({ status: "absent" });
-          await PatrolGuards.update({ status: "absent" }, { where: { patrolRunId: patrolRun.id } });
-          console.log(`🚨 PatrolRun ${patrolRun.id} marked ABSENT (30 min after delayed)`);
-        }
+    console.log(`🚀 PatrolRun ${patrolRun.id} moved to ONGOING`);
+    continue;
+  }
+
+  /**
+   * ✅ ONGOING → COMPLETED
+   */
+  if (
+    patrolRun.status === "ongoing" &&
+    now.isSameOrAfter(estimatedEnd)
+  ) {
+    await patrolRun.update({ status: "completed" });
+
+    await PatrolGuards.update(
+      { status: "completed" },
+      { where: { patrolRunId: patrolRun.id } }
+    );
+
+    // set clock-out if not set
+    await PatrolGuards.update(
+      { clockOutTime: now.toDate() },
+      {
+        where: {
+          patrolRunId: patrolRun.id,
+          clockOutTime: null,
+        },
       }
+    );
 
-      if (patrolRun.status === "ongoing" ) {
-        await patrolRun.update({ status: "ongoing" });
-        await PatrolGuards.update({ status: "ongoing" }, { where: { patrolRunId: patrolRun.id } });
-        await PatrolGuards.update({ clockInTime: now }, { where: { patrolRunId: patrolRun.id, clockInTime: null } });
-        console.log(`⏳ PatrolRun ${patrolRun.id} marked ONGOING`);
+    console.log(`✅ PatrolRun ${patrolRun.id} marked COMPLETED`);
+    continue;
+  }
 
-        continue;
-      }
 
-      if (patrolRun.status === "completed" ) {
-        await patrolRun.update({ status: "completed" });
-        await PatrolGuards.update({ status: "completed" }, { where: { patrolRunId: patrolRun.id } });
-        console.log(`⏳ PatrolRun ${patrolRun.id} marked COMPLETED`);
+      // if (patrolRun.status === "ongoing" && now.isAfter(estimatedEnd)) {
+      //   await patrolRun.update({ status: "delayed" });
+      //   await PatrolGuards.update({ status: "delayed" }, { where: { patrolRunId: patrolRun.id } });
+      //   console.log(`⏳ PatrolRun ${patrolRun.id} marked DELAYED`);
+      //   continue;
+      // }
 
-        continue;
-      }
+      // if (patrolRun.status === "delayed") {
+      //   const delayedLimit = estimatedEnd.clone().add(30, "minutes");
+      //   if (now.isAfter(delayedLimit)) {
+      //     await patrolRun.update({ status: "absent" });
+      //     await PatrolGuards.update({ status: "absent" }, { where: { patrolRunId: patrolRun.id } });
+      //     console.log(`🚨 PatrolRun ${patrolRun.id} marked ABSENT (30 min after delayed)`);
+      //   }
+      // }
+
+      // if (patrolRun.status === "ongoing" ) {
+      //   await patrolRun.update({ status: "ongoing" });
+      //   await PatrolGuards.update({ status: "ongoing" }, { where: { patrolRunId: patrolRun.id } });
+      //   await PatrolGuards.update({ clockInTime: now }, { where: { patrolRunId: patrolRun.id, clockInTime: null } });
+      //   console.log(`⏳ PatrolRun ${patrolRun.id} marked ONGOING`);
+
+      //   continue;
+      // }
+
+      // if (patrolRun.status === "completed" ) {
+      //   await patrolRun.update({ status: "completed" });
+      //   await PatrolGuards.update({ status: "completed" }, { where: { patrolRunId: patrolRun.id } });
+      //   console.log(`⏳ PatrolRun ${patrolRun.id} marked COMPLETED`);
+
+      //   continue;
+      // }
     }
 
     console.log("✅ Patrol status cron finished");
