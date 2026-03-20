@@ -1922,35 +1922,24 @@ export const clockOut = async (req, res, next) => {
      */
 
     if (!isStatic) {
-      if (!["ongoing", "delayed","absent"].includes(shift.status)) {
-        return res.status(400).json({
-          success: false,
-          message: "Patrol run can only be clocked out from ongoing or delayed status",
-        });
-      }
+  // ✅ Allow clock-out even if patrol is completed
+  if (!["ongoing", "delayed", "absent", "completed"].includes(shift.status)) {
+    return res.status(400).json({
+      success: false,
+      message:
+        "Patrol run can only be clocked out from ongoing, delayed, absent or completed status",
+    });
+  }
 
-      // ongoing → check completion
-      if (shift.status === "ongoing") {
-        if (now >= shiftEnd) {
-          shiftStatus = "completed";
-          assignmentStatus = "completed";
-        } else {
-          warnings.push("Patrol run ended before estimated completion.");
-        }
-      }
+  // ❌ DO NOT change any status for patrol
+  assignmentStatus = assignment.status; // keep existing
+  shiftStatus = shift.status; // keep existing
 
-      // delayed → remain delayed
-      if (shift.status === "delayed") {
-        shiftStatus = "delayed";
-        assignmentStatus = "completed";
-      }
-
-      // absent → remain absent
-      if (shift.status === "absent") {
-        shiftStatus = "absent";
-        assignmentStatus = "completed";
-      }
-    }
+  // Optional warning
+  if (shift.status === "completed") {
+    warnings.push("Patrol already completed. Late clock-out.");
+  }
+}
 
     /**
      * ======================================================
@@ -1968,14 +1957,18 @@ export const clockOut = async (req, res, next) => {
      */
 
     assignment.clockOutTime = now;
-    assignment.totalHours = totalHours;
-    assignment.status = assignmentStatus;
+assignment.totalHours = totalHours;
 
-    await assignment.save();
+// ✅ Only update status for STATIC
+if (isStatic) {
+  assignment.status = assignmentStatus;
+  await assignment.save();
 
-    await shift.update({ status: shiftStatus });
-    await assignment.update({status: assignmentStatus});
-
+  await shift.update({ status: shiftStatus });
+} else {
+  // ✅ Patrol → ONLY save time + hours
+  await assignment.save();
+}
     /**
      * ======================================================
      * NOTIFICATIONS
