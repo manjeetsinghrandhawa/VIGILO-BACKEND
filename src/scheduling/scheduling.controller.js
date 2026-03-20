@@ -2587,6 +2587,7 @@ if (!shift) {
   });
 }
 
+
 /**
  * 6️⃣ PATROL UPCOMING
  */
@@ -2646,7 +2647,7 @@ if (!shift) {
           required: true,
           attributes: ["id", "name", "email", "avatar"],
           through: {
-            where: { status: "accepted" },
+            where: { status: "upcoming" },
             attributes: [
               "status",
               "clockInTime",
