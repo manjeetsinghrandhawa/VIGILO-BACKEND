@@ -263,7 +263,7 @@ const updateShiftStatuses = async () => {
           const overtimeStart = moment(assignment.overtimeStartTime).tz(tz);
           const overtimeLimit = overtimeStart.clone().add(3, "hours");
 
-          if (now.isSameOrAfter(overtimeLimit)) {
+          if (!assignment.status === "missed_endovertime" && now.isSameOrAfter(overtimeLimit)) {
             await assignment.update({ status: "missed_endovertime" });
             await shift.update({ status: "missed_endovertime" });
 
