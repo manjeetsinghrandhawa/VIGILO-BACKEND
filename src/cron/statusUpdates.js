@@ -53,6 +53,7 @@ const updateOrderStatuses = async () => {
         },
       },
       limit: ORDER_BATCH_SIZE,
+      order: [["createdAt", "DESC"]], // ✅ ADD THIS TO PRIORITIZE RECENT ORDERS
     });
 
     let updatedCount = 0;
@@ -146,7 +147,7 @@ const updateShiftStatuses = async () => {
   try {
     const tz = getTimeZone();
     const now = moment().tz(tz);
-    const graceMinutes = 10;
+    const graceMinutes = 0;
 
     const shifts = await Static.findAll({
       attributes: ["id", "status", "startTime", "endTime"],
@@ -156,6 +157,7 @@ const updateShiftStatuses = async () => {
         },
       },
       limit: SHIFT_BATCH_SIZE,
+      order: [["startTime", "DESC"]], // ✅ ADD THIS TO PRIORITIZE RECENT SHIFTS
       include: [
         {
           model: User,
@@ -202,7 +204,7 @@ const updateShiftStatuses = async () => {
 
         if (
           shift.status === "upcoming" &&
-          now.isAfter(shiftStart.clone().add(graceMinutes, "minutes")) &&
+          now.isAfter(shiftStart) &&
           !assignment.clockInTime
         ) {
           await shift.update({ status: "absent" });
@@ -240,7 +242,7 @@ const updateShiftStatuses = async () => {
         if (
           shift.status === "ongoing" &&
           shiftEnd &&
-          now.isAfter(shiftEnd.clone().add(graceMinutes, "minutes")) &&
+          now.isAfter(shiftEnd) &&
           !assignment.clockOutTime
         ) {
           await shift.update({ status: "absent" });
@@ -306,6 +308,8 @@ const updatePatrolRunStatuses = async () => {
           [Op.in]: ["pending", "upcoming", "ongoing", "delayed", "absent","completed"],
         },
       },
+      limit: PATROL_BATCH_SIZE,
+  order: [["createdAt", "DESC"]], // ✅ ADD THIS TO PRIORITIZE RECENT PATROL RUNS
       
     });
 
@@ -445,6 +449,7 @@ const updateAlarmStatuses = async () => {
         },
       },
       limit: ALARM_BATCH_SIZE,
+  order: [["createdAt", "DESC"]], // ✅ ADD THIS
     });
 
     for (const alarm of alarms) {
