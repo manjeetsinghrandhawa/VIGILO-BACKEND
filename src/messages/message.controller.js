@@ -159,6 +159,7 @@ export const createOrGetConversation = async (req, res) => {
         include: [
           {
             model: Conversation,
+            as: "conversation",
             where: { type: "direct" },
             required: true,
           },
@@ -301,6 +302,7 @@ export const getChatList = async (req, res) => {
       include: [
         {
           model: Conversation,
+          as: "conversation",
           required: true,
         },
       ],
@@ -309,7 +311,7 @@ export const getChatList = async (req, res) => {
 
     const chatList = await Promise.all(
       memberships.map(async (membership) => {
-        const conversation = membership.Conversation;
+        const conversation = membership.conversation;
 
         const hiddenMessageIds = await getHiddenMessageIds(authUserId, membership.conversationId);
         const messageWhere = {
@@ -341,7 +343,7 @@ export const getChatList = async (req, res) => {
               userId: { [Op.ne]: authUserId },
               isActive: true,
             },
-            include: [{ model: User, attributes: ["id", "name", "avatar", "role"] }],
+            include: [{ model: User, as: "User", attributes: ["id", "name", "avatar", "role"] }],
           });
 
           if (otherParticipant?.User) {
@@ -475,6 +477,7 @@ export const getConversationParticipants = async (req, res) => {
       include: [
         {
           model: User,
+          as: "User",
           attributes: ["id", "name", "avatar", "role"],
         },
       ],
