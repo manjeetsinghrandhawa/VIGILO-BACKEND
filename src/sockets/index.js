@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import UserPresence from "../messages/userPresence.model.js";
 
 const onlineUsers = new Map();
+const normalizeId = (value) => (value === null || value === undefined ? null : String(value));
 
 const initSocket = (io) => {
 
@@ -23,13 +24,15 @@ const initSocket = (io) => {
           resolvedUserId = payload;
         }
 
-        if (!resolvedUserId) return;
+        const normalizedUserId = normalizeId(resolvedUserId);
+        if (!normalizedUserId) return;
 
-        socket.userId = resolvedUserId;
-        onlineUsers.set(resolvedUserId, socket.id);
+        socket.userId = normalizedUserId;
+        onlineUsers.set(normalizedUserId, socket.id);
+        socket.join(`user:${normalizedUserId}`);
 
         UserPresence.upsert({
-          userId: resolvedUserId,
+          userId: normalizedUserId,
           isOnline: true,
           socketId: socket.id,
           lastSeenAt: new Date(),
@@ -38,7 +41,7 @@ const initSocket = (io) => {
         });
 
         io.emit("presence:update", {
-          userId: resolvedUserId,
+          userId: normalizedUserId,
           isOnline: true,
           lastSeenAt: null,
         });
@@ -62,26 +65,24 @@ const initSocket = (io) => {
     messageSocket(io, socket, onlineUsers);
 
     socket.on("disconnect", () => {
+      if (socket.userId) {
+        const normalizedUserId = normalizeId(socket.userId);
+        onlineUsers.delete(normalizedUserId);
 
-      for (let [userId, socketId] of onlineUsers.entries()) {
-        if (socketId === socket.id) {
-          onlineUsers.delete(userId);
+        UserPresence.upsert({
+          userId: normalizedUserId,
+          isOnline: false,
+          socketId: null,
+          lastSeenAt: new Date(),
+        }).catch((error) => {
+          console.error("Presence disconnect error:", error.message);
+        });
 
-          UserPresence.upsert({
-            userId,
-            isOnline: false,
-            socketId: null,
-            lastSeenAt: new Date(),
-          }).catch((error) => {
-            console.error("Presence disconnect error:", error.message);
-          });
-
-          io.emit("presence:update", {
-            userId,
-            isOnline: false,
-            lastSeenAt: new Date(),
-          });
-        }
+        io.emit("presence:update", {
+          userId: normalizedUserId,
+          isOnline: false,
+          lastSeenAt: new Date(),
+        });
       }
 
       console.log("User disconnected");

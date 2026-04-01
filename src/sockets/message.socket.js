@@ -4,6 +4,8 @@ import MessageReceipt from "../messages/messageReceipt.model.js";
 import MessageVisibility from "../messages/messageVisibility.model.js";
 import { Op } from "sequelize";
 
+const normalizeId = (value) => (value === null || value === undefined ? null : String(value));
+
 const recomputeMessageStatus = async (messageId) => {
   const receipts = await MessageReceipt.findAll({
     where: { messageId },
@@ -68,7 +70,7 @@ const messageSocket = (io, socket, onlineUsers) => {
         replyToMessageId = null,
         attachments = [],
       } = data;
-      const senderId = socket.userId;
+      const senderId = normalizeId(socket.userId);
       const normalizedMessage = typeof message === "string" ? message.trim() : "";
       const normalizedAttachments = Array.isArray(attachments) ? attachments : [];
 
@@ -117,10 +119,12 @@ const messageSocket = (io, socket, onlineUsers) => {
       }
 
       for (const participant of participants) {
-        const receiverSocket = onlineUsers.get(participant.userId);
+        const receiverUserId = normalizeId(participant.userId);
+        const receiverSocket = onlineUsers.get(receiverUserId);
+
+        io.to(`user:${receiverUserId}`).emit("receiveMessage", messagePayload);
 
         if (receiverSocket) {
-          io.to(receiverSocket).emit("receiveMessage", messagePayload);
           await MessageReceipt.update(
             {
               deliveredAt: new Date(),
@@ -128,7 +132,7 @@ const messageSocket = (io, socket, onlineUsers) => {
             {
               where: {
                 messageId: newMessage.id,
-                userId: participant.userId,
+                userId: receiverUserId,
               },
             }
           );
@@ -206,7 +210,7 @@ const messageSocket = (io, socket, onlineUsers) => {
     io.to(conversationId).emit("messageSeen", { messageId, seenBy: socket.userId });
   });
 
-  socket.on("editMessage", async ({ messageId, conversationId, content }) => {
+  socket.on("x", async ({ messageId, conversationId, content }) => {
     try {
       if (!socket.userId || !messageId || !conversationId || !content) return;
 
